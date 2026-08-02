@@ -1,0 +1,28 @@
+#pragma once
+
+// Wi-Fi credentials used by this ESP32 installation.
+#define WIFI_SSID "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+
+// Firebase project Web API key and Realtime Database URL.
+// DATABASE_URL examples:
+//   https://your-project-default-rtdb.firebaseio.com
+//   https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
+#define FIREBASE_API_KEY "YOUR_FIREBASE_WEB_API_KEY"
+#define FIREBASE_DATABASE_URL \
+  "https://YOUR_PROJECT_ID-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+// Create a dedicated Firebase Authentication Email/Password user for this device.
+// Realtime Database Security Rules should restrict this UID to SWADS_DEVICE_ID.
+#define FIREBASE_USER_EMAIL "esp32-bin-001@example.com"
+#define FIREBASE_USER_PASSWORD "REPLACE_WITH_A_STRONG_DEVICE_PASSWORD"
+
+// Firebase keys cannot contain '.', '$', '#', '[', ']', '/', or control characters.
+#define SWADS_DEVICE_ID "esp32-bin-001"
+#define SWADS_BIN_ID "bin-001"
+
+#define SWADS_FIRMWARE_VERSION "1.0.0"
+#define SWADS_DATABASE_ROOT "/swads/v1"
+
+// Used until /swads/v1/devices/{deviceId}/config is available.
+#define DEFAULT_BIN_HEIGHT_CM 50.0f

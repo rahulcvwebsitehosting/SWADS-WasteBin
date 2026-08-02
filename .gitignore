@@ -1,0 +1,12 @@
+.gradle/
+.idea/
+android/.gradle/
+android/.idea/
+android/app/build/
+android/build/
+android/local.properties
+firmware/**/.pio/
+functions/node_modules/
+functions/lib/
+functions/.firebase/
+**/build/

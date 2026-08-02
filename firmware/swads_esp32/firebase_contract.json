@@ -1,0 +1,264 @@
+{
+  "contractVersion": 1,
+  "firebaseRoot": "/swads/v1",
+  "timestampEncoding": {
+    "firmwareWritePlaceholder": {
+      ".sv": "timestamp"
+    },
+    "resolvedReadType": "integer",
+    "resolvedUnit": "milliseconds since Unix epoch UTC"
+  },
+  "databaseTree": {
+    "devices": {
+      "{deviceId}": {
+        "config": {
+          "schemaVersion": 1,
+          "binHeightCm": 50.0,
+          "calibrationVersion": 1,
+          "updatedAt": 1785321000000
+        },
+        "info": {
+          "schemaVersion": 1,
+          "deviceId": "esp32-bin-001",
+          "binId": "bin-001",
+          "bootId": "esp32-bin-001-7",
+          "bootCount": 7,
+          "firmwareVersion": "1.0.0",
+          "firebaseUid": "firebase-auth-uid",
+          "hardware": {
+            "microcontroller": "ESP32 DevKit V1",
+            "distanceSensor": "HC-SR04",
+            "power": {
+              "charger": "TP4056",
+              "boostConverter": "MT3608"
+            },
+            "pins": {
+              "triggerGpio": 5,
+              "echoGpio": 18,
+              "ledGpio": 2,
+              "buzzerGpio": 4
+            },
+            "echoVoltageDivider": {
+              "topOhms": 10000,
+              "bottomOhms": 20000,
+              "maxOutputVolts": 3.33
+            }
+          },
+          "lastBootAt": 1785321000000
+        },
+        "state": {
+          "schemaVersion": 1,
+          "deviceId": "esp32-bin-001",
+          "binId": "bin-001",
+          "bootId": "esp32-bin-001-7",
+          "firmwareVersion": "1.0.0",
+          "state": "CRITICAL",
+          "alertActive": true,
+          "alertCycleId": "esp32-bin-001-7-12",
+          "measurement": {
+            "valid": true,
+            "distanceCm": 9.85,
+            "fillPercent": 80.3,
+            "sampleCount": 5,
+            "validSampleCount": 5,
+            "timeoutSampleCount": 0,
+            "outOfRangeSampleCount": 0,
+            "sensorHealth": "OK",
+            "measuredAtDeviceUptimeMs": 125430
+          },
+          "thresholds": {
+            "triggerFillPercent": 80.0,
+            "resetFillPercent": 20.0,
+            "triggerDistanceCm": 10.0,
+            "resetDistanceCm": 40.0
+          },
+          "confirmation": {
+            "requiredWindows": 3,
+            "triggerWindows": 0,
+            "resetWindows": 0
+          },
+          "indicators": {
+            "ledOn": true,
+            "buzzerEnabled": true
+          },
+          "connectivity": {
+            "wifiConnected": true,
+            "wifiRssiDbm": -58
+          },
+          "eventQueue": {
+            "depth": 0,
+            "overflow": false
+          },
+          "calibration": {
+            "binHeightCm": 50.0,
+            "calibrationVersion": 1
+          },
+          "lastUpdatedAt": 1785321000000
+        },
+        "heartbeat": {
+          "schemaVersion": 1,
+          "deviceId": "esp32-bin-001",
+          "binId": "bin-001",
+          "bootId": "esp32-bin-001-7",
+          "firmwareVersion": "1.0.0",
+          "deviceUptimeMs": 1800000,
+          "state": "CRITICAL",
+          "sensorHealth": "OK",
+          "wifiRssiDbm": -58,
+          "freeHeapBytes": 184320,
+          "pendingEventCount": 0,
+          "eventQueueOverflow": false,
+          "sentAt": 1785321000000
+        },
+        "telemetry": {
+          "{bootId}-{telemetrySequence}": {
+            "schemaVersion": 1,
+            "telemetryId": "esp32-bin-001-7-31",
+            "telemetrySequence": 31,
+            "deviceId": "esp32-bin-001",
+            "binId": "bin-001",
+            "bootId": "esp32-bin-001-7",
+            "firmwareVersion": "1.0.0",
+            "state": "CRITICAL",
+            "measurement": {
+              "valid": true,
+              "distanceCm": 9.85,
+              "fillPercent": 80.3,
+              "sampleCount": 5,
+              "validSampleCount": 5,
+              "timeoutSampleCount": 0,
+              "outOfRangeSampleCount": 0,
+              "sensorHealth": "OK",
+              "measuredAtDeviceUptimeMs": 125430
+            },
+            "thresholds": {
+              "triggerFillPercent": 80.0,
+              "resetFillPercent": 20.0,
+              "triggerDistanceCm": 10.0,
+              "resetDistanceCm": 40.0
+            },
+            "wifiRssiDbm": -58,
+            "consecutiveInvalidWindows": 0,
+            "calibrationVersion": 1,
+            "recordedAt": 1785321000000
+          }
+        }
+      }
+    },
+    "events": {
+      "{alertEventId}": {
+        "schemaVersion": 1,
+        "eventId": "esp32-bin-001-7-12",
+        "type": "ALERT_80",
+        "source": "ESP32",
+        "deviceId": "esp32-bin-001",
+        "binId": "bin-001",
+        "firmwareVersion": "1.0.0",
+        "deviceBootCount": 7,
+        "deviceEventSequence": 12,
+        "detectedAtDeviceUptimeMs": 125430,
+        "alertCycleId": "esp32-bin-001-7-12",
+        "stateBefore": "NORMAL",
+        "stateAfter": "CRITICAL",
+        "measurement": {
+          "valid": true,
+          "distanceCm": 9.85,
+          "fillPercent": 80.3,
+          "sampleCount": 5,
+          "validSampleCount": 5,
+          "timeoutSampleCount": 0,
+          "outOfRangeSampleCount": 0,
+          "sensorHealth": "OK",
+          "measuredAtDeviceUptimeMs": 125430
+        },
+        "thresholds": {
+          "triggerFillPercent": 80.0,
+          "resetFillPercent": 20.0,
+          "triggerDistanceCm": 10.0,
+          "resetDistanceCm": 40.0
+        },
+        "calibration": {
+          "binHeightCm": 50.0,
+          "calibrationVersion": 1
+        },
+        "receivedAt": 1785321000000
+      },
+      "{resetEventId}": {
+        "schemaVersion": 1,
+        "eventId": "esp32-bin-001-7-13",
+        "type": "RESET",
+        "source": "ESP32",
+        "deviceId": "esp32-bin-001",
+        "binId": "bin-001",
+        "firmwareVersion": "1.0.0",
+        "deviceBootCount": 7,
+        "deviceEventSequence": 13,
+        "detectedAtDeviceUptimeMs": 925430,
+        "alertCycleId": "esp32-bin-001-7-12",
+        "stateBefore": "CRITICAL",
+        "stateAfter": "NORMAL",
+        "measurement": {
+          "valid": true,
+          "distanceCm": 41.2,
+          "fillPercent": 17.6,
+          "sampleCount": 5,
+          "validSampleCount": 5,
+          "timeoutSampleCount": 0,
+          "outOfRangeSampleCount": 0,
+          "sensorHealth": "OK",
+          "measuredAtDeviceUptimeMs": 925430
+        },
+        "thresholds": {
+          "triggerFillPercent": 80.0,
+          "resetFillPercent": 20.0,
+          "triggerDistanceCm": 10.0,
+          "resetDistanceCm": 40.0
+        },
+        "calibration": {
+          "binHeightCm": 50.0,
+          "calibrationVersion": 1
+        },
+        "receivedAt": 1785321800000
+      }
+    }
+  },
+  "fieldRules": {
+    "state": [
+      "NORMAL",
+      "CRITICAL"
+    ],
+    "eventType": [
+      "ALERT_80",
+      "RESET"
+    ],
+    "sensorHealth": [
+      "INITIALIZING",
+      "OK",
+      "DEGRADED",
+      "TIMEOUT",
+      "INVALID"
+    ],
+    "nullableFields": [
+      "devices/{deviceId}/state/alertCycleId",
+      "devices/{deviceId}/state/measurement/distanceCm",
+      "devices/{deviceId}/state/measurement/fillPercent",
+      "events/{eventId}/alertCycleId",
+      "events/{eventId}/measurement/distanceCm",
+      "events/{eventId}/measurement/fillPercent"
+    ],
+    "idempotency": {
+      "eventPath": "/swads/v1/events/{eventId}",
+      "eventWriteMethod": "SET",
+      "eventIdFormat": "{deviceId}-{bootCount}-{deviceEventSequence}"
+    },
+    "ownership": {
+      "configWriter": "Android app or trusted backend",
+      "infoWriter": "ESP32",
+      "stateWriter": "ESP32",
+      "heartbeatWriter": "ESP32",
+      "telemetryWriter": "ESP32",
+      "eventsWriter": "ESP32",
+      "eventsProcessor": "Firebase Cloud Functions"
+    }
+  }
+}
