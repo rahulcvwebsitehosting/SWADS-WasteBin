@@ -9,4 +9,6 @@ firmware/**/.pio/
 functions/node_modules/
 functions/lib/
 functions/.firebase/
+functions/.runtime-secrets.local
 **/build/
+firmware/**/firebase_secrets.h

@@ -1,34 +1,42 @@
 {
   "project_info": {
-    "project_number": "000000000000",
-    "firebase_url": "https://YOUR_PROJECT_ID-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "project_id": "YOUR_PROJECT_ID",
-    "storage_bucket": "YOUR_PROJECT_ID.firebasestorage.app"
+    "project_number": "143806082591",
+    "firebase_url": "https://swads-wastebin-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "swads-wastebin",
+    "storage_bucket": "swads-wastebin.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "mobilesdk_app_id": "1:143806082591:android:d6dfa99180b86da1a5ef2a",
         "android_client_info": {
-          "package_name": "com.swads.app"
+          "package_name": "com.swads.wastebin"
         }
       },
       "oauth_client": [
         {
-          "client_id": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com",
+          "client_id": "143806082591-7k84181hg1cn3caed6go2rpn1bab789r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.swads.wastebin",
+            "certificate_hash": "993f1ac30a7af8ff1c2fa6ce11df60ea8334ed7b"
+          }
+        },
+        {
+          "client_id": "143806082591-e2gvm5qarseu3eqdoh4cknquudkpudfu.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "YOUR_FIREBASE_WEB_API_KEY"
+          "current_key": "AIzaSyB0aeSnlS2BTcaA4KfA0lXzVQqV8DWKmV4"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com",
+              "client_id": "143806082591-e2gvm5qarseu3eqdoh4cknquudkpudfu.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

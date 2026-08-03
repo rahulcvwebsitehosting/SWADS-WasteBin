@@ -4,20 +4,19 @@ import android.app.Application
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.database.FirebaseDatabase
-import kotlinx.coroutines.Dispatchers
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 
 data class AuthUiState(
     val isLoading: Boolean = false,
@@ -28,13 +27,16 @@ data class AuthUiState(
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val firebaseAuth = FirebaseAuth.getInstance()
     private val database = FirebaseDatabase.getInstance().reference
+    private val functions = FirebaseFunctions.getInstance("asia-southeast1")
     private val gmailScope = "https://www.googleapis.com/auth/gmail.send"
+    private val webClientId = defaultWebClientId(application)
 
     private val googleSignInClient =
         GoogleSignIn.getClient(
             application,
             GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(defaultWebClientId(application))
+                .requestIdToken(webClientId)
+                .requestServerAuthCode(webClientId, true)
                 .requestEmail()
                 .requestScopes(Scope(gmailScope))
                 .build(),
@@ -63,9 +65,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val idToken =
                     googleAccount.idToken
                         ?: error("Google ID token was not returned.")
-                val account =
-                    googleAccount.account
-                        ?: error("Google account was not returned.")
+                val serverAuthCode =
+                    googleAccount.serverAuthCode
+                        ?: error("Google authorization code was not returned.")
 
                 val firebaseCredential =
                     GoogleAuthProvider.getCredential(idToken, null)
@@ -75,20 +77,20 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     authResult.user?.uid
                         ?: error("Firebase user ID was not returned.")
 
-                val accessToken =
-                    withContext(Dispatchers.IO) {
-                        GoogleAuthUtil.getToken(
-                            getApplication(),
-                            account,
-                            "oauth2:$gmailScope",
-                        )
-                    }
+                functions
+                    .getHttpsCallable("saveGoogleOAuthCode")
+                    .call(mapOf("code" to serverAuthCode))
+                    .await()
 
+                val fcmToken = FirebaseMessaging.getInstance().token.await()
                 database
+                    .child("swads")
+                    .child("v1")
                     .child("users")
                     .child(uid)
-                    .child("gmailOAuthToken")
-                    .setValue(accessToken)
+                    .child("fcmTokens")
+                    .push()
+                    .setValue(fcmToken)
                     .await()
 
                 _uiState.value = AuthUiState(isSignedIn = true)

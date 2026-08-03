@@ -126,23 +126,47 @@ fun RegisterBinScreen(
                                 error("Enter a location.")
                             }
 
+                            val ownerUid =
+                                FirebaseAuth.getInstance().currentUser?.uid
+                                    ?: error("Sign in before registering a bin.")
+                            val deviceId = "esp32-$normalizedBinId"
                             val binData =
                                 mapOf(
                                     "binId" to normalizedBinId,
+                                    "deviceId" to deviceId,
                                     "heightCm" to parsedHeight,
                                     "location" to parseLocation(normalizedLocation),
-                                    "ownerUid" to
-                                        FirebaseAuth.getInstance().currentUser?.uid,
+                                    "ownerUid" to ownerUid,
                                     "currentFillPercent" to 0.0,
                                     "currentState" to "NORMAL",
                                     "createdAt" to ServerValue.TIMESTAMP,
                                 )
+                            val deviceConfig =
+                                mapOf(
+                                    "schemaVersion" to 1,
+                                    "binId" to normalizedBinId,
+                                    "binHeightCm" to parsedHeight,
+                                    "calibrationVersion" to 1,
+                                    "updatedAt" to ServerValue.TIMESTAMP,
+                                )
+                            val registration =
+                                mapOf(
+                                    "ownerUid" to ownerUid,
+                                    "binId" to normalizedBinId,
+                                    "registeredAt" to ServerValue.TIMESTAMP,
+                                )
+                            val registrationUpdates =
+                                mapOf(
+                                    "swads/v1/bins/$normalizedBinId" to binData,
+                                    "swads/v1/deviceRegistry/$deviceId" to registration,
+                                )
 
-                            FirebaseDatabase
-                                .getInstance()
-                                .getReference("bins")
-                                .child(normalizedBinId)
-                                .setValue(binData)
+                            FirebaseDatabase.getInstance().reference
+                                .updateChildren(registrationUpdates)
+                                .await()
+                            FirebaseDatabase.getInstance().reference
+                                .child("swads/v1/devices/$deviceId/config")
+                                .setValue(deviceConfig)
                                 .await()
 
                             onRegistered()

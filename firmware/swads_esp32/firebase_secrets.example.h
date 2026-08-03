@@ -1,0 +1,6 @@
+#pragma once
+
+#define WIFI_SSID "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#define FIREBASE_USER_EMAIL "esp32-bin-001@swads.local"
+#define FIREBASE_USER_PASSWORD "YOUR_DEVICE_PASSWORD"

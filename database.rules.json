@@ -1,0 +1,65 @@
+{
+  "rules": {
+    "swads": {
+      "v1": {
+        "bins": {
+          ".read": "auth != null",
+          "$binId": {
+            ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['binId', 'deviceId', 'heightCm', 'location', 'ownerUid', 'currentFillPercent', 'currentState'])"
+          }
+        },
+        "devices": {
+          ".read": "auth != null",
+          "$deviceId": {
+            "config": {
+              ".write": "auth != null && root.child('swads/v1/deviceRegistry').child($deviceId).child('ownerUid').val() === auth.uid"
+            },
+            "$deviceData": {
+              ".write": "auth != null && root.child('swads/v1/deviceUsers').child(auth.uid).child($deviceId).val() === true"
+            }
+          }
+        },
+        "events": {
+          "$eventId": {
+            ".read": "auth != null && root.child('swads/v1/bins').child(data.child('binId').val()).child('ownerUid').val() === auth.uid",
+            ".write": "auth != null && newData.child('deviceId').isString() && root.child('swads/v1/deviceUsers').child(auth.uid).child(newData.child('deviceId').val()).val() === true"
+          }
+        },
+        "deviceRegistry": {
+          ".read": "auth != null",
+          "$deviceId": {
+            ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid)"
+          }
+        },
+        "deviceUsers": {
+          ".read": false,
+          ".write": false
+        },
+        "activeAlerts": {
+          "$binId": {
+            ".read": "auth != null && root.child('swads/v1/bins').child($binId).child('ownerUid').val() === auth.uid",
+            ".write": false
+          }
+        },
+        "alertCycles": {
+          "$cycleId": {
+            ".read": "auth != null && data.child('ownerUid').val() === auth.uid",
+            ".write": false
+          }
+        },
+        "users": {
+          "$uid": {
+            ".read": "auth.uid === $uid",
+            "googleOAuth": {
+              ".write": false
+            },
+            "fcmTokens": {
+              ".write": "auth.uid === $uid"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -23,7 +23,7 @@ data class DashboardUiState(
 
 class DashboardViewModel : ViewModel() {
     private val binsReference =
-        FirebaseDatabase.getInstance().getReference("bins")
+        FirebaseDatabase.getInstance().getReference("swads/v1/bins")
 
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()

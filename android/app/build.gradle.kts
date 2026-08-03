@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.swads.app"
+    namespace = "com.swads.wastebin"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.swads.app"
+        applicationId = "com.swads.wastebin"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
@@ -50,6 +50,8 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-database")
+    implementation("com.google.firebase:firebase-functions")
+    implementation("com.google.firebase:firebase-messaging")
 
     implementation("com.google.android.gms:play-services-auth:21.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")

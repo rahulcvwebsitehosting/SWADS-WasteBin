@@ -3,7 +3,11 @@ import { getDatabase } from "firebase-admin/database";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger, setGlobalOptions } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
-import { onValueCreated } from "firebase-functions/v2/database";
+import {
+  onValueCreated,
+  onValueWritten,
+} from "firebase-functions/v2/database";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { google } from "googleapis";
 import OpenAI from "openai";
 
@@ -49,6 +53,15 @@ interface BinRecord {
     pinCode?: string;
     address?: string;
   };
+}
+
+interface DeviceState {
+  binId?: string;
+  state?: "NORMAL" | "CRITICAL";
+  measurement?: {
+    fillPercent?: number | null;
+  };
+  lastUpdatedAt?: number;
 }
 
 interface Contact {
@@ -141,6 +154,45 @@ function isFirebaseKey(value: string): boolean {
 function sanitizeOneLine(value: string): string {
   return value.replace(/[\r\n]+/g, " ").trim();
 }
+
+export const saveGoogleOAuthCode = onCall(
+  {
+    secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET],
+  },
+  async (request) => {
+    const ownerUid = request.auth?.uid;
+    if (!ownerUid) {
+      throw new HttpsError("unauthenticated", "Sign in is required");
+    }
+
+    const code =
+      typeof request.data?.code === "string" ? request.data.code.trim() : "";
+    if (!code) {
+      throw new HttpsError("invalid-argument", "OAuth code is required");
+    }
+
+    const oauthClient = new google.auth.OAuth2(
+      GOOGLE_OAUTH_CLIENT_ID.value(),
+      GOOGLE_OAUTH_CLIENT_SECRET.value(),
+      "postmessage",
+    );
+    const { tokens } = await oauthClient.getToken(code);
+    if (!tokens.refresh_token) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Google did not return a refresh token. Revoke SWADS access and sign in again.",
+      );
+    }
+
+    await database.ref(`${ROOT}/users/${ownerUid}/googleOAuth`).set({
+      refreshToken: tokens.refresh_token,
+      scope: tokens.scope ?? "https://www.googleapis.com/auth/gmail.send",
+      updatedAt: Date.now(),
+    });
+
+    return { saved: true };
+  },
+);
 
 function locationDescription(bin: BinRecord): string {
   const location = bin.location ?? {};
@@ -401,6 +453,44 @@ async function markEventBackend(
       updatedAt: Date.now(),
     });
 }
+
+export const syncBinState = onValueWritten(
+  {
+    ref: `${ROOT}/devices/{deviceId}/state`,
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (triggerEvent) => {
+    const state = triggerEvent.data.after.val() as DeviceState | null;
+    if (!state?.binId || !isFirebaseKey(state.binId)) {
+      return;
+    }
+
+    const fillPercent = state.measurement?.fillPercent;
+    const currentState =
+      state.state === "CRITICAL"
+        ? "ALERT_80"
+        : typeof fillPercent === "number" && fillPercent <= 20
+          ? "CLEARED"
+          : "NORMAL";
+
+    await database.ref(`${ROOT}/bins/${state.binId}`).transaction((bin) => {
+      if (!bin?.ownerUid) {
+        return;
+      }
+
+      return {
+        ...bin,
+        ...(typeof fillPercent === "number"
+          ? { currentFillPercent: fillPercent }
+          : {}),
+        currentState,
+        deviceId: triggerEvent.params.deviceId,
+        lastTelemetryAt: state.lastUpdatedAt ?? Date.now(),
+      };
+    });
+  },
+);
 
 export const dispatchOnAlert = onValueCreated(
   {

@@ -9,6 +9,21 @@
     "resolvedUnit": "milliseconds since Unix epoch UTC"
   },
   "databaseTree": {
+    "bins": {
+      "{binId}": {
+        "binId": "bin-001",
+        "deviceId": "esp32-bin-001",
+        "heightCm": 50.0,
+        "location": {
+          "pinCode": "641001"
+        },
+        "ownerUid": "firebase-owner-uid",
+        "currentFillPercent": 80.3,
+        "currentState": "ALERT_80",
+        "createdAt": 1785321000000,
+        "lastTelemetryAt": 1785321000000
+      }
+    },
     "devices": {
       "{deviceId}": {
         "config": {
@@ -227,6 +242,11 @@
       "NORMAL",
       "CRITICAL"
     ],
+    "binCurrentState": [
+      "NORMAL",
+      "ALERT_80",
+      "CLEARED"
+    ],
     "eventType": [
       "ALERT_80",
       "RESET"
@@ -258,7 +278,9 @@
       "heartbeatWriter": "ESP32",
       "telemetryWriter": "ESP32",
       "eventsWriter": "ESP32",
-      "eventsProcessor": "Firebase Cloud Functions"
+      "eventsProcessor": "Firebase Cloud Functions",
+      "binMetadataWriter": "Android app",
+      "binLiveStateWriter": "Firebase Cloud Functions syncBinState"
     }
   }
 }

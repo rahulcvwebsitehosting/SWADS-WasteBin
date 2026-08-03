@@ -1,21 +1,33 @@
 #pragma once
 
+#if __has_include("firebase_secrets.h")
+#include "firebase_secrets.h"
+#endif
+
 // Wi-Fi credentials used by this ESP32 installation.
+#ifndef WIFI_SSID
 #define WIFI_SSID "YOUR_WIFI_SSID"
+#endif
+#ifndef WIFI_PASSWORD
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#endif
 
 // Firebase project Web API key and Realtime Database URL.
 // DATABASE_URL examples:
 //   https://your-project-default-rtdb.firebaseio.com
 //   https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
-#define FIREBASE_API_KEY "YOUR_FIREBASE_WEB_API_KEY"
+#define FIREBASE_API_KEY "AIzaSyB0aeSnlS2BTcaA4KfA0lXzVQqV8DWKmV4"
 #define FIREBASE_DATABASE_URL \
-  "https://YOUR_PROJECT_ID-default-rtdb.asia-southeast1.firebasedatabase.app"
+  "https://swads-wastebin-default-rtdb.asia-southeast1.firebasedatabase.app"
 
 // Create a dedicated Firebase Authentication Email/Password user for this device.
 // Realtime Database Security Rules should restrict this UID to SWADS_DEVICE_ID.
-#define FIREBASE_USER_EMAIL "esp32-bin-001@example.com"
+#ifndef FIREBASE_USER_EMAIL
+#define FIREBASE_USER_EMAIL "esp32-bin-001@swads.local"
+#endif
+#ifndef FIREBASE_USER_PASSWORD
 #define FIREBASE_USER_PASSWORD "REPLACE_WITH_A_STRONG_DEVICE_PASSWORD"
+#endif
 
 // Firebase keys cannot contain '.', '$', '#', '[', ']', '/', or control characters.
 #define SWADS_DEVICE_ID "esp32-bin-001"
