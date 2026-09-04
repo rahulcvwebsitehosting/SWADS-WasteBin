@@ -6,6 +6,16 @@
     "rules": "database.rules.json",
     "instance": "swads-wastebin-default-rtdb"
   },
+  "hosting": {
+    "public": "hosting",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "cleanUrls": true,
+    "trailingSlash": false
+  },
   "emulators": {
     "functions": {
       "port": 5001

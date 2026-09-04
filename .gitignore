@@ -9,6 +9,7 @@ firmware/**/.pio/
 functions/node_modules/
 functions/lib/
 functions/.firebase/
+.firebase/
 functions/.runtime-secrets.local
 functions/.secret.local
 *-debug.log
