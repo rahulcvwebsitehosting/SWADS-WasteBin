@@ -54,8 +54,8 @@
               "buzzerGpio": 4
             },
             "echoVoltageDivider": {
-              "topOhms": 10000,
-              "bottomOhms": 20000,
+              "topOhms": 1000,
+              "bottomOhms": 2000,
               "maxOutputVolts": 3.33
             }
           },

@@ -12,16 +12,21 @@ import { google } from "googleapis";
 import OpenAI from "openai";
 
 initializeApp();
+const FUNCTION_REGION =
+  process.env.FUNCTIONS_EMULATOR === "true"
+    ? "us-central1"
+    : "asia-southeast1";
 setGlobalOptions({
-  region: "asia-southeast1",
+  region: FUNCTION_REGION,
   maxInstances: 10,
 });
 
 const database = getDatabase();
 const ROOT = "/swads/v1";
 const EVENT_PATH = `${ROOT}/events/{eventId}`;
+const DATABASE_INSTANCE = "swads-wastebin-default-rtdb";
 
-const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const OPENROUTER_API_KEY = defineSecret("OPENROUTER_API_KEY");
 const GOOGLE_OAUTH_CLIENT_ID = defineSecret("GOOGLE_OAUTH_CLIENT_ID");
 const GOOGLE_OAUTH_CLIENT_SECRET = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 
@@ -44,6 +49,7 @@ interface EspEvent {
 
 interface BinRecord {
   ownerUid: string;
+  deviceId?: string;
   displayName?: string;
   location?: {
     latitude?: number;
@@ -74,7 +80,7 @@ interface Contact {
 
 interface ResearchResult {
   contacts: Contact[];
-  source: "openai" | "fallback";
+  source: "openrouter" | "fallback";
   error?: string;
 }
 
@@ -102,46 +108,6 @@ const DEFAULT_TAMIL_NADU_CONTACTS: Contact[] = [
     confidence: "high",
   },
 ];
-
-const CONTACT_RESPONSE_SCHEMA = {
-  name: "waste_management_contacts",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      contacts: {
-        type: "array",
-        maxItems: 20,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            organization: { type: "string" },
-            email: { type: "string" },
-            type: {
-              type: "string",
-              enum: ["municipal", "private_recycler"],
-            },
-            sourceUrl: { type: "string" },
-            confidence: {
-              type: "string",
-              enum: ["high", "medium", "low"],
-            },
-          },
-          required: [
-            "organization",
-            "email",
-            "type",
-            "sourceUrl",
-            "confidence",
-          ],
-        },
-      },
-    },
-    required: ["contacts"],
-  },
-} as const;
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -174,10 +140,17 @@ export const saveGoogleOAuthCode = onCall(
     const oauthClient = new google.auth.OAuth2(
       GOOGLE_OAUTH_CLIENT_ID.value(),
       GOOGLE_OAUTH_CLIENT_SECRET.value(),
-      "postmessage",
+      "",
     );
     const { tokens } = await oauthClient.getToken(code);
-    if (!tokens.refresh_token) {
+    const existingOAuthSnapshot = await database
+      .ref(`${ROOT}/users/${ownerUid}/googleOAuth`)
+      .get();
+    const existingRefreshToken = (
+      existingOAuthSnapshot.val() as { refreshToken?: string } | null
+    )?.refreshToken;
+    const refreshToken = tokens.refresh_token ?? existingRefreshToken;
+    if (!refreshToken) {
       throw new HttpsError(
         "failed-precondition",
         "Google did not return a refresh token. Revoke SWADS access and sign in again.",
@@ -185,7 +158,7 @@ export const saveGoogleOAuthCode = onCall(
     }
 
     await database.ref(`${ROOT}/users/${ownerUid}/googleOAuth`).set({
-      refreshToken: tokens.refresh_token,
+      refreshToken,
       scope: tokens.scope ?? "https://www.googleapis.com/auth/gmail.send",
       updatedAt: Date.now(),
     });
@@ -218,46 +191,71 @@ function locationDescription(bin: BinRecord): string {
 }
 
 function normalizedContacts(value: unknown): Contact[] {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !Array.isArray((value as { contacts?: unknown }).contacts)
-  ) {
+  const candidates =
+    Array.isArray(value)
+      ? value
+      : typeof value === "object" && value !== null &&
+          Array.isArray((value as { contacts?: unknown }).contacts)
+        ? (value as { contacts: unknown[] }).contacts
+        : [];
+  if (candidates.length === 0) {
     return [];
   }
 
   const uniqueContacts = new Map<string, Contact>();
-  for (const candidate of (value as { contacts: unknown[] }).contacts) {
+  for (const candidate of candidates) {
     if (typeof candidate !== "object" || candidate === null) {
       continue;
     }
 
-    const contact = candidate as Partial<Contact>;
-    const email = contact.email?.trim().toLowerCase() ?? "";
-    const type = contact.type;
-    const confidence = contact.confidence;
-    const validType =
-      type === "municipal" ||
-      type === "private_recycler";
-    const validConfidence =
-      confidence === "high" ||
-      confidence === "medium" ||
-      confidence === "low";
+    const contact = candidate as Record<string, unknown>;
+    const organization =
+      typeof contact.organization === "string"
+        ? contact.organization.trim()
+        : "";
+    const email =
+      typeof contact.email === "string"
+        ? contact.email.trim().toLowerCase()
+        : "";
+    const rawType =
+      typeof contact.type === "string" ? contact.type.toLowerCase() : "";
+    const type: ContactType | null =
+      rawType.includes("municipal")
+        ? "municipal"
+        : rawType.includes("private") || rawType.includes("recycler")
+          ? "private_recycler"
+          : null;
+    const rawConfidence = contact.confidence;
+    const confidence: ContactConfidence | null =
+      rawConfidence === "high" ||
+      rawConfidence === "medium" ||
+      rawConfidence === "low"
+        ? rawConfidence
+        : typeof rawConfidence === "number"
+          ? rawConfidence >= 0.8
+            ? "high"
+            : rawConfidence >= 0.5
+              ? "medium"
+              : "low"
+          : null;
+    const sourceUrl =
+      typeof contact.sourceUrl === "string" ? contact.sourceUrl.trim() : "";
 
     if (
       !isEmail(email) ||
-      !contact.organization?.trim() ||
-      !validType ||
-      !validConfidence
+      !organization ||
+      !type ||
+      !confidence ||
+      !/^https?:\/\//i.test(sourceUrl)
     ) {
       continue;
     }
 
     uniqueContacts.set(email, {
-      organization: contact.organization.trim(),
+      organization,
       email,
       type,
-      sourceUrl: contact.sourceUrl?.trim() ?? "",
+      sourceUrl,
       confidence,
     });
   }
@@ -265,18 +263,39 @@ function normalizedContacts(value: unknown): Contact[] {
   return [...uniqueContacts.values()];
 }
 
+function parseJsonResponse(content: string): unknown {
+  const unfenced = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  if (unfenced.startsWith("[") && unfenced.endsWith("]")) {
+    return JSON.parse(unfenced);
+  }
+  const objectStart = unfenced.indexOf("{");
+  const objectEnd = unfenced.lastIndexOf("}");
+
+  if (objectStart === -1 || objectEnd < objectStart) {
+    throw new Error("OpenRouter response did not contain a JSON object");
+  }
+
+  return JSON.parse(unfenced.slice(objectStart, objectEnd + 1));
+}
+
 async function researchContacts(bin: BinRecord): Promise<ResearchResult> {
   try {
-    const openai = new OpenAI({ apiKey: OPENAI_API_KEY.value() });
+    const openai = new OpenAI({
+      apiKey: OPENROUTER_API_KEY.value(),
+      baseURL: "https://openrouter.ai/api/v1",
+    });
     const location = locationDescription(bin);
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "inclusionai/ling-3.0-flash:free",
       temperature: 0.1,
       messages: [
         {
           role: "system",
           content:
-            "Find official municipal solid-waste contacts and legitimate private waste recyclers. Return only contacts relevant to the supplied Tamil Nadu location. Never invent an email address. Prefer official government domains and include the source URL used for each contact.",
+            'Find official municipal solid-waste contacts and legitimate private waste recyclers. Return only valid JSON with exactly one top-level contacts array and no Markdown or explanatory text. Use exactly this shape: {"contacts":[{"organization":"...","email":"...","type":"municipal","sourceUrl":"https://...","confidence":"high"}]}. The only allowed type values are "municipal" and "private_recycler". The only allowed confidence values are "high", "medium", and "low". Never invent a contact name, organization, email address, or source URL. Prefer official government domains and return only contacts relevant to the supplied Tamil Nadu location.',
         },
         {
           role: "user",
@@ -285,26 +304,22 @@ async function researchContacts(bin: BinRecord): Promise<ResearchResult> {
             `recyclers within approximately 5 km of this bin location: ${location}.`,
         },
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: CONTACT_RESPONSE_SCHEMA,
-      },
     });
 
     const content = completion.choices[0]?.message.content;
     if (!content) {
-      throw new Error("OpenAI returned an empty response");
+      throw new Error("OpenRouter returned an empty response");
     }
 
-    const contacts = normalizedContacts(JSON.parse(content));
+    const contacts = normalizedContacts(parseJsonResponse(content));
     if (contacts.length === 0) {
-      throw new Error("OpenAI returned no valid email contacts");
+      throw new Error("OpenRouter returned no valid email contacts");
     }
 
-    return { contacts, source: "openai" };
+    return { contacts, source: "openrouter" };
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Unknown OpenAI error";
+      error instanceof Error ? error.message : "Unknown OpenRouter error";
     logger.warn("Contact research failed; using Tamil Nadu fallback contacts", {
       error: message,
     });
@@ -447,7 +462,7 @@ async function markEventBackend(
   values: Record<string, unknown>,
 ): Promise<void> {
   await database
-    .ref(`${ROOT}/events/${eventId}/backend`)
+    .ref(`${ROOT}/eventBackend/${eventId}`)
     .update({
       ...values,
       updatedAt: Date.now(),
@@ -457,12 +472,29 @@ async function markEventBackend(
 export const syncBinState = onValueWritten(
   {
     ref: `${ROOT}/devices/{deviceId}/state`,
+    instance: DATABASE_INSTANCE,
     timeoutSeconds: 30,
     memory: "256MiB",
   },
   async (triggerEvent) => {
     const state = triggerEvent.data.after.val() as DeviceState | null;
     if (!state?.binId || !isFirebaseKey(state.binId)) {
+      return;
+    }
+
+    const deviceId = triggerEvent.params.deviceId;
+    const registrationSnapshot = await database
+      .ref(`${ROOT}/deviceRegistry/${deviceId}`)
+      .get();
+    const registration = registrationSnapshot.val() as
+      | { binId?: string }
+      | null;
+    if (registration?.binId !== state.binId) {
+      logger.warn("Rejected device state with mismatched bin registration", {
+        deviceId,
+        reportedBinId: state.binId,
+        registeredBinId: registration?.binId ?? null,
+      });
       return;
     }
 
@@ -475,7 +507,7 @@ export const syncBinState = onValueWritten(
           : "NORMAL";
 
     await database.ref(`${ROOT}/bins/${state.binId}`).transaction((bin) => {
-      if (!bin?.ownerUid) {
+      if (!bin?.ownerUid || bin.deviceId !== deviceId) {
         return;
       }
 
@@ -485,7 +517,7 @@ export const syncBinState = onValueWritten(
           ? { currentFillPercent: fillPercent }
           : {}),
         currentState,
-        deviceId: triggerEvent.params.deviceId,
+        deviceId,
         lastTelemetryAt: state.lastUpdatedAt ?? Date.now(),
       };
     });
@@ -495,8 +527,9 @@ export const syncBinState = onValueWritten(
 export const dispatchOnAlert = onValueCreated(
   {
     ref: EVENT_PATH,
+    instance: DATABASE_INSTANCE,
     secrets: [
-      OPENAI_API_KEY,
+      OPENROUTER_API_KEY,
       GOOGLE_OAUTH_CLIENT_ID,
       GOOGLE_OAUTH_CLIENT_SECRET,
     ],
@@ -598,6 +631,10 @@ export const dispatchOnAlert = onValueCreated(
     try {
       const research = await researchContacts(bin);
       const recipients = research.contacts.map((contact) => contact.email);
+      logger.info("Contact research completed", {
+        source: research.source,
+        contactCount: recipients.length,
+      });
       const binLabel = sanitizeOneLine(bin.displayName || event.binId);
       const subject =
         `URGENT: Smart Bin #${binLabel} at ${location} ` +
@@ -677,6 +714,7 @@ export const dispatchOnAlert = onValueCreated(
 export const clearOnReset = onValueCreated(
   {
     ref: EVENT_PATH,
+    instance: DATABASE_INSTANCE,
     timeoutSeconds: 60,
     memory: "256MiB",
   },
@@ -698,25 +736,53 @@ export const clearOnReset = onValueCreated(
     );
     const activeSnapshot = await activeAlertRef.get();
     const activeValue = activeSnapshot.val() as
+      | string
       | { alertCycleId?: string }
       | null;
-    const alertCycleId =
-      event.alertCycleId || activeValue?.alertCycleId;
+    const activeAlertCycleId =
+      typeof activeValue === "string"
+        ? activeValue
+        : activeValue?.alertCycleId;
 
-    if (!alertCycleId) {
+    if (!activeAlertCycleId) {
       await markEventBackend(eventId, {
         status: "ResetWithoutActiveAlert",
       });
       return;
     }
 
+    if (
+      event.alertCycleId &&
+      event.alertCycleId !== activeAlertCycleId
+    ) {
+      await markEventBackend(eventId, {
+        status: "Rejected",
+        error: "Reset alertCycleId does not match the active alert",
+      });
+      return;
+    }
+
+    const alertCycleId = activeAlertCycleId;
+
     const cycleRef = database.ref(
       `${ROOT}/alertCycles/${alertCycleId}`,
     );
     const cycleSnapshot = await cycleRef.get();
     const cycle = cycleSnapshot.val() as
-      | { ownerUid?: string; binId?: string }
+      | { ownerUid?: string; binId?: string; deviceId?: string }
       | null;
+
+    if (
+      !cycle ||
+      cycle.binId !== event.binId ||
+      cycle.deviceId !== event.deviceId
+    ) {
+      await markEventBackend(eventId, {
+        status: "Rejected",
+        error: "Reset event does not match the active alert cycle",
+      });
+      return;
+    }
 
     await cycleRef.update({
       status: "Cleared",

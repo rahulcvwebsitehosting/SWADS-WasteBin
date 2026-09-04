@@ -119,8 +119,8 @@ fun RegisterBinScreen(
                             ) {
                                 error("Enter a valid Firebase-safe bin ID.")
                             }
-                            if (parsedHeight <= 0.0) {
-                                error("Bin height must be greater than zero.")
+                            if (parsedHeight !in 10.0..350.0) {
+                                error("Bin height must be between 10 and 350 cm.")
                             }
                             if (normalizedLocation.isBlank()) {
                                 error("Enter a location.")

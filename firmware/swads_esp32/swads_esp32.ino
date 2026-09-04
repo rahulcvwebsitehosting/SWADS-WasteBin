@@ -20,13 +20,13 @@ constexpr uint8_t BUZZER_PIN = 4;
 //   VCC  -> MT3608 regulated 5 V output
 //   GND  -> common ground shared with the ESP32
 //   TRIG -> GPIO5
-//   ECHO -> 10 kOhm resistor -> GPIO18 -> 20 kOhm resistor -> GND
+//   ECHO -> 1 kOhm resistor -> GPIO18 -> 2 kOhm resistor -> GND
 //
 // The divider limits the HC-SR04's 5 V Echo output to:
-//   5.0 V * 20 kOhm / (10 kOhm + 20 kOhm) = 3.33 V
+//   5.0 V * 2 kOhm / (1 kOhm + 2 kOhm) = 3.33 V
 // The divider changes voltage only; pulse duration is read normally by pulseIn().
-constexpr uint32_t ECHO_DIVIDER_TOP_OHMS = 10000;
-constexpr uint32_t ECHO_DIVIDER_BOTTOM_OHMS = 20000;
+constexpr uint32_t ECHO_DIVIDER_TOP_OHMS = 1000;
+constexpr uint32_t ECHO_DIVIDER_BOTTOM_OHMS = 2000;
 constexpr float ECHO_DIVIDER_MAX_OUTPUT_VOLTS = 3.33f;
 
 constexpr uint8_t MEDIAN_SAMPLE_COUNT = 5;
@@ -292,7 +292,7 @@ void loadPersistedRuntime() {
 void updateIndicators(uint32_t now) {
   if (currentBinState() != BinState::CRITICAL) {
     digitalWrite(LED_PIN, LOW);
-    digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(BUZZER_PIN, BUZZER_ACTIVE_HIGH ? LOW : HIGH);
     buzzerOutputHigh = false;
     buzzerChangedAt = now;
     return;
@@ -303,7 +303,10 @@ void updateIndicators(uint32_t now) {
   const uint32_t interval = buzzerOutputHigh ? BUZZER_ON_MS : BUZZER_OFF_MS;
   if (intervalElapsed(now, buzzerChangedAt, interval)) {
     buzzerOutputHigh = !buzzerOutputHigh;
-    digitalWrite(BUZZER_PIN, buzzerOutputHigh ? HIGH : LOW);
+    const bool buzzerEnabled = buzzerOutputHigh;
+    digitalWrite(
+        BUZZER_PIN,
+        buzzerEnabled == BUZZER_ACTIVE_HIGH ? HIGH : LOW);
     buzzerChangedAt = now;
   }
 }
@@ -464,6 +467,16 @@ void transitionTo(BinState newState, const Measurement &measurement) {
       : EventType::RESET;
 
   const bool queued = appendPendingEvent(eventType, measurement);
+  if (!queued) {
+    savePersistedRuntime();
+    forceStatePublish = true;
+    Serial.printf(
+        "State remains %s because the %s event queue is full.\n",
+        binStateName(currentBinState()),
+        eventTypeName(eventType));
+    return;
+  }
+
   persistedRuntime.binState = static_cast<uint8_t>(newState);
   savePersistedRuntime();
 
@@ -792,7 +805,9 @@ bool publishTelemetry() {
       persistedRuntime.calibrationVersion);
   json.set("recordedAt/.sv", "timestamp");
 
-  const bool success = Firebase.RTDB.setJSON(
+  // Patch the event so a network-level retry remains idempotent and does not
+  // replace fields that may be added to the event contract later.
+  const bool success = Firebase.RTDB.updateNode(
       &firebaseData,
       path,
       &json);
@@ -1010,7 +1025,7 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(TRIGGER_PIN, LOW);
   digitalWrite(LED_PIN, LOW);
-  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(BUZZER_PIN, BUZZER_ACTIVE_HIGH ? LOW : HIGH);
 
   validateConfiguration();
 

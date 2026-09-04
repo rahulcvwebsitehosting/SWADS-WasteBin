@@ -25,8 +25,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.unit.dp
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +111,7 @@ fun DashboardScreen(
 
 @Composable
 private fun BinCard(bin: BinItem) {
+    val locale = LocalLocale.current.platformLocale
     val isCritical = bin.currentState == "ALERT_80"
     val containerColor =
         if (isCritical) {
@@ -147,7 +148,7 @@ private fun BinCard(bin: BinItem) {
             ) {
                 Text(
                     String.format(
-                        Locale.getDefault(),
+                        locale,
                         "%.1f%% full",
                         bin.currentFillPercent,
                     ),

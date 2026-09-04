@@ -1,6 +1,7 @@
 package com.swads.wastebin.dashboard
 
 import androidx.lifecycle.ViewModel
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -22,8 +23,15 @@ data class DashboardUiState(
 )
 
 class DashboardViewModel : ViewModel() {
+    private val ownerUid =
+        FirebaseAuth.getInstance().currentUser?.uid
+            ?: error("A signed-in user is required for the dashboard.")
     private val binsReference =
-        FirebaseDatabase.getInstance().getReference("swads/v1/bins")
+        FirebaseDatabase
+            .getInstance()
+            .getReference("swads/v1/bins")
+            .orderByChild("ownerUid")
+            .equalTo(ownerUid)
 
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()

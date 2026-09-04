@@ -12,6 +12,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
+import com.swads.wastebin.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,7 +37,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             application,
             GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestIdToken(webClientId)
-                .requestServerAuthCode(webClientId, true)
+                .requestServerAuthCode(webClientId, false)
                 .requestEmail()
                 .requestScopes(Scope(gmailScope))
                 .build(),
@@ -96,6 +97,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = AuthUiState(isSignedIn = true)
             } catch (exception: Exception) {
                 firebaseAuth.signOut()
+                runCatching { googleSignInClient.signOut().await() }
                 _uiState.value =
                     AuthUiState(
                         errorMessage =
@@ -112,15 +114,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun defaultWebClientId(application: Application): String {
-        val resourceId =
-            application.resources.getIdentifier(
-                "default_web_client_id",
-                "string",
-                application.packageName,
-            )
-        require(resourceId != 0) {
-            "default_web_client_id is missing. Add the Firebase google-services.json file."
-        }
-        return application.getString(resourceId)
+        return application.getString(R.string.default_web_client_id)
     }
 }

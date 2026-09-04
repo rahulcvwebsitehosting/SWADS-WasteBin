@@ -36,5 +36,10 @@
 #define SWADS_FIRMWARE_VERSION "1.0.0"
 #define SWADS_DATABASE_ROOT "/swads/v1"
 
+// Set to 0 only when the buzzer module turns on with a LOW signal.
+#ifndef BUZZER_ACTIVE_HIGH
+#define BUZZER_ACTIVE_HIGH 1
+#endif
+
 // Used until /swads/v1/devices/{deviceId}/config is available.
 #define DEFAULT_BIN_HEIGHT_CM 50.0f

@@ -8,7 +8,9 @@
   },
   "scripts": {
     "build": "tsc src/index.ts --outDir lib --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck --strict",
-    "deploy": "npm run build && firebase deploy --only functions"
+    "deploy": "npm run build && firebase deploy --only functions",
+    "test:rules:node": "node --test test/database.rules.test.mjs",
+    "test:rules": "firebase emulators:exec --project swads-wastebin --only database \"npm run test:rules:node\""
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",
@@ -16,8 +18,15 @@
     "googleapis": "^173.0.0",
     "openai": "^7.1.0"
   },
+  "overrides": {
+    "qs": "^6.16.0",
+    "uuid": "^11.1.1"
+  },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^22.20.1",
+    "firebase": "^12.18.0",
+    "firebase-tools": "^15.28.2",
     "typescript": "^7.0.2"
   }
 }

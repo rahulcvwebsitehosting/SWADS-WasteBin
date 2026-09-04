@@ -10,5 +10,12 @@ functions/node_modules/
 functions/lib/
 functions/.firebase/
 functions/.runtime-secrets.local
+functions/.secret.local
+*-debug.log
+tmp/
+android/gradle/gradle-daemon-jvm.properties
+android/.kotlin/
+android/keystore.properties
+android/release-signing/
 **/build/
 firmware/**/firebase_secrets.h
