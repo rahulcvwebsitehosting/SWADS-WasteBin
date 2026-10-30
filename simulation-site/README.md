@@ -4,7 +4,7 @@ Double-click `SWADS_3D_Lab.html` for the self-contained offline lab. No installa
 
 Alternatively run `npm start`, then open http://127.0.0.1:4173. No dependencies required. Run `npm test` for the local state-model checks.
 
-The `dist/` folder is the standalone static website. It uses a dependency-free Canvas perspective 3D renderer with mesh geometry, depth-sorted shading, orbit, zoom and picking. No external runtime requests are needed. Geometry is illustrative, not measured CAD.
+The `dist/` folder is the standalone static website. It uses locally bundled Three.js r160 (MIT) with a WebGL depth buffer, lit meshes, orbit, zoom and visible-surface picking. WebGL-capable browser required. No external runtime requests are needed. Geometry is illustrative, not measured CAD.
 
 Views: assembled cutaway, exploded concept, circuit explorer. Controls: fill, depth, power, Wi-Fi, calibration, sensor timeout, contact verification, pause, step and speed. Connection bench injects open-circuit faults. The working demo demonstrates fill alert, offline reset and reconnect without contacting Firebase or sending mail.
 

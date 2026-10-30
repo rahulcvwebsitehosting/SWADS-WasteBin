@@ -14,3 +14,5 @@ Product references inspected 30 October 2026:
 - Robu searches for R261487 and 261487 returned no product. Boost model remains unverified.
 
 Sensor grille and antenna detail improved. Enclosure and bin are original design concepts, not purchased product replicas. No measured-fit claim is made. Cloud/notification behavior remains simulated.
+
+Production follow-up: stable 15 GPU geometries and 15 draw calls after 60 alternating view changes. Forced context loss exposed stale-buffer disposal warnings; disposal now occurs while context is lost, before restoration. Pointer capture is guarded against cancelled/synthetic pointers.
