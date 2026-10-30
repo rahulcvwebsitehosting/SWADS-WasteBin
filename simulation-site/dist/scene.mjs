@@ -3,9 +3,9 @@
 const palette={bin:'#50786b',mint:'#bcf394',pcb:'#255f52',blue:'#326a91',black:'#20272b',silver:'#afc1c6',wire:'#81baf0'};
 const parts=[
  {id:'sensor',name:'HC-SR04 ultrasonic sensor',color:'#36749c',description:'Mounted under the lid, facing the waste. Five distance readings form one median-filtered window. Keep the sound path clear.',pins:['VCC → regulated 5 V','GND → protected load-side ground','TRIG → GPIO5','ECHO → 20 kΩ → GPIO18; 40 kΩ below junction'],p:[0,5.25,0],size:[1.4,.18,.65]},
- {id:'esp',name:'SmartElex ESP32-WROOM-32E',color:'#327462',description:'Wi-Fi controller running the sensing and alert state machine. The model uses GPIO5, GPIO18, GPIO2 and GPIO4 from our firmware.',pins:['VIN → verified regulated 5 V','GND → common load ground','GPIO5 / 18 → TRIG / divided ECHO','GPIO2 / 4 → LED / buzzer'],p:[2.65,3.6,0],size:[.95,.16,1.65]},
+ {id:'esp',name:'SmartElex ESP32-WROOM-32E',color:'#327462',description:'Wi-Fi controller running the sensing and alert state machine. Robu reference R150542 confirms the PCB antenna and two supplied male headers. Delivered pin count, dimensions and board revision still need unpacked verification.',pins:['VIN → verified regulated 5 V','GND → common load ground','GPIO5 / 18 → TRIG / divided ECHO','GPIO2 / 4 → LED / buzzer'],p:[2.65,3.6,0],size:[.95,.16,1.65]},
  {id:'battery',name:'18650 cell + holder',color:'#d292b4',description:'One rechargeable cell supplies the protected charger. Holder is modeled with the cell; capacity and runtime are not estimated.',pins:['Cell + → TP4056 B+','Cell − → TP4056 B−','Keep exposed cell contacts insulated'],p:[2.65,1.4,.1],size:[.72,.65,1.7]},
- {id:'charger',name:'Protected TP4056 · SKU 53264',color:'#3674aa',description:'Use the protected board with separate B and OUT pads. A basic TP4056 has no load-sharing power path; turn off the load while charging.',pins:['B+ / B− → battery only','OUT+ → switch → boost IN+','OUT− → boost IN− / load ground','USB input → charger only'],p:[2.65,2.4,-.7],size:[.7,.12,.8]},
+ {id:'charger',name:'Protected TP4056 · SKU 53264',color:'#3674aa',description:'Robu SKU 53264 has a Mini-USB socket, TP4056 / DW01 protection and separate B / OUT pads. Robu notes that layouts may vary. A basic TP4056 has no load-sharing power path; turn off the load while charging.',pins:['B+ / B− → battery only','OUT+ → switch → boost IN+','OUT− → boost IN− / load ground','USB input → charger only'],p:[2.65,2.4,-.7],size:[.7,.12,.8]},
  {id:'boost',name:'Regulated 5 V boost · R261487',color:'#487e87',description:'Raises the battery supply to regulated 5 V. Set and measure 5.0 V before connecting the ESP32. Current capacity and heat need physical testing.',pins:['IN+ → switch from protected OUT+','IN− → protected OUT−','OUT+ → ESP32 VIN / HC-SR04 VCC','OUT− → common load ground'],p:[2.65,2.5,.75],size:[.7,.17,.85]},
  {id:'switch',name:'Load power switch',color:'#a3b6af',description:'Disconnects the load from the protected battery output. Operate this switch from Live controls.',pins:['Protected OUT+ → switch → boost IN+','Switch load OFF during charging'],p:[2.7,1.9,1],size:[.4,.35,.35]},
  {id:'divider',name:'Echo divider · 3 × 20 kΩ',color:'#c8b191',description:'The three purchased resistors form 20 kΩ above the GPIO junction and 40 kΩ below it. Nominal output is 5 × 40 / 60 = 3.33 V. This is a nominal calculation only.',pins:['HC-SR04 ECHO → 20 kΩ → GPIO18 junction','Junction → 20 kΩ → 20 kΩ → GND'],p:[2.65,4.5,.8],size:[.7,.12,.75]},
@@ -39,14 +39,14 @@ export class Scene{
  if(id==='pcb'){this.box(p,s,color,id);for(let i=0;i<6;i++)for(let j=0;j<12;j++)this.box([x-.5+i*.2,y+.08,z-1.5+j*.27],[.045,.018,.045],'#cdbb8a',id);return;}
  if(id==='battery'){this.box([x,y-.1,z],[.85,.2,1.95],'#1b2429',id);this.cylinder([x,y+.2,z],.29,1.65,color,id,'z');this.cylinder([x,y+.2,z+.85],.16,.035,palette.silver,id,'z');return;}
  if(id==='capacitor'){for(const dx of [-.16,.16]){this.cylinder([x+dx,y+.15,z],.13,.55,color,id);this.box([x+dx,y+.44,z],[.17,.015,.04],palette.silver,id);}return;}
- if(id==='sensor'){this.box(p,s,color,id);for(const dx of [-.39,.39]){this.cylinder([x+dx,y-.2,z],.235,.28,'#b9c9ca',id);this.cylinder([x+dx,y-.35,z],.18,.025,'#34494f',id);}for(let i=0;i<4;i++)this.box([x-.24+i*.16,y+.12,z+.31],[.035,.18,.035],'#d4b770',id);return;}
+ if(id==='sensor'){this.box(p,s,color,id);for(const dx of [-.39,.39]){this.cylinder([x+dx,y-.2,z],.235,.28,'#b9c9ca',id);this.cylinder([x+dx,y-.35,z],.18,.025,'#34494f',id);for(let a=-2;a<=2;a++)for(let b=-2;b<=2;b++)if(a*a+b*b<7)this.cylinder([x+dx+a*.057,y-.367,z+b*.057],.012,.008,'#b8c5c8',id,'y',6);}for(let i=0;i<4;i++)this.box([x-.24+i*.16,y+.12,z+.31],[.035,.18,.035],'#d4b770',id);return;}
  if(id==='led'){this.cylinder(p,.15,.22,this.led?'#ff5b42':'#8d3933',id);this.box([x,y-.2,z],[.35,.08,.4],'#4a6551',id);return;}
  if(id==='buzzer'){this.box([x,y-.12,z],[.7,.1,.7],palette.pcb,id);this.cylinder(p,.24,.32,'#222b30',id);this.cylinder([x,y+.17,z],.08,.02,'#0c1517',id);return;}
  if(id==='divider'){this.box(p,[.8,.06,.9],palette.pcb,id);for(let i=0;i<3;i++){const a=x+(i-1)*.23;this.box([a,y+.1,z],[.14,.12,.53],color,id);this.box([a,y+.17,z],[.15,.01,.055],'#b5714a',id);}return;}
  if(id==='switch'){this.box(p,s,'#262e31',id);this.box([x,y+.22,z],[.23,.13,.25],this.power?'#a3cb89':'#ca7560',id);return;}
  this.box(p,s,color,id);
- if(id==='esp'){this.box([x,y+.14,z-.2],[.67,.15,.67],'#aebdbb',id);this.box([x,y+.1,z+.65],[.6,.08,.36],'#191f24',id);for(const dx of [-.43,.43])for(let i=0;i<12;i++)this.box([x+dx,y+.11,z-.73+i*.13],[.09,.08,.04],'#c7b371',id);this.box([x,y+.1,z-.85],[.36,.13,.19],'#a4b8bf',id);}
- else{this.box([x,y+.11,z],[.28,.12,.28],'#222c31',id);this.box([x,y+.12,z+.29],[.28,.15,.15],'#afc4c5',id);if(id==='boost')this.cylinder([x+.17,y+.18,z-.13],.17,.12,'#9d987c',id);}
+ if(id==='esp'){this.box([x,y+.14,z-.2],[.67,.15,.67],'#aebdbb',id);this.box([x,y+.1,z+.65],[.6,.08,.36],'#191f24',id);for(let i=0;i<5;i++){this.box([x-.23+i*.11,y+.145,z+.65],[.025,.008,.25],'#c8ae63',id);this.box([x-.18+i*.11,y+.145,z+(i%2?.53:.77)],[.11,.008,.025],'#c8ae63',id);}for(const dx of [-.43,.43])for(let i=0;i<19;i++)this.box([x+dx,y+.11,z-.76+i*.084],[.09,.08,.04],'#c7b371',id);this.box([x,y+.1,z-.85],[.36,.13,.19],'#a4b8bf',id);}
+ else{this.box([x,y+.11,z],[.28,.12,.28],'#222c31',id);this.box([x,y+.12,z+.29],id==='charger'?[.36,.22,.29]:[.28,.15,.15],'#afc4c5',id);if(id==='charger'){this.box([x,y+.12,z+.445],[.26,.12,.012],'#20252b',id);this.box([x+.17,y+.13,z-.25],[.16,.08,.2],'#171c22',id);for(const dx of [-.22,.22])for(const dz of [-.32,-.18])this.cylinder([x+dx,y+.075,z+dz],.045,.018,'#d3b86e',id);}if(id==='boost')this.cylinder([x+.17,y+.18,z-.13],.17,.12,'#9d987c',id);}
  }
  draw(){const ctx=this.ctx;if(!this.w||!this.h)return;ctx.clearRect(0,0,this.w,this.h);this.faces=[];this.lines=[];this.hits=[];
  this.buildHousing();
@@ -122,7 +122,7 @@ Scene.prototype.part=function(part,p){
  return;}
  if(!cut&&!['sensor','led','buzzer','switch','sim','spare'].includes(id))return;
  if(id==='pcb'&&this.view!=='circuit'){
- this.box(p,[1.35,3.6,.08],'#a69661',id);for(let i=0;i<6;i++)for(let j=0;j<17;j++)this.box([x-.52+i*.21,y-1.6+j*.2,z+.045],[.035,.035,.012],'#d8c998',id);return;}
+ this.box(p,[1.35,3.6,.08],'#287245',id);for(let i=0;i<6;i++)for(let j=0;j<17;j++)this.box([x-.52+i*.21,y-1.6+j*.2,z+.045],[.035,.035,.012],'#d8c998',id);return;}
  const begin=this.faces.length,oldLines=this.lines.length;
  oldPart.call(this,part,[0,0,0]);
  const vertical=this.view!=='circuit'&&!['sensor','led','sim','spare'].includes(id);

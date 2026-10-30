@@ -1,1 +1,1 @@
-{"name":"swads-virtual-prototype","private":true,"type":"module","scripts":{"start":"node server.mjs","test":"node --test logic.test.mjs"}}
+{"name":"swads-virtual-prototype","private":true,"type":"module","scripts":{"start":"node server.mjs","test":"node --test logic.test.mjs geometry.test.mjs"}}
