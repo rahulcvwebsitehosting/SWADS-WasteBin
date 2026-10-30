@@ -42,6 +42,7 @@ function event(eventId = "esp32-bin-001-1-1") {
     binId: "bin-001",
     alertCycleId: eventId,
     measurement: { valid: true, fillPercent: 82.5 },
+    deviceEventSequence: 1,
     receivedAt: 1,
   };
 }
@@ -77,22 +78,15 @@ after(async () => {
   await testEnv.cleanup();
 });
 
-test("owners can register a valid bin but cannot transfer its ownership", async () => {
+test("clients cannot claim devices, create bins, or forge live state", async () => {
   const ownerDb = testEnv.authenticatedContext("owner-1").database();
-  await assertSucceeds(
-    update(ref(ownerDb, rootPath), {
-      "bins/bin-001": bin("owner-1"),
-      "deviceRegistry/esp32-bin-001": {
-        ownerUid: "owner-1",
-        binId: "bin-001",
-      },
-    }),
-  );
-  await assertFails(
-    update(ref(ownerDb, `${rootPath}/bins/bin-001`), {
-      ownerUid: "owner-2",
-    }),
-  );
+  await assertFails(update(ref(ownerDb, rootPath), {
+    "bins/bin-001": bin("owner-1"),
+    "deviceRegistry/esp32-bin-001": { ownerUid: "owner-1", binId: "bin-001" },
+  }));
+  await seedRegistration();
+  await assertFails(update(ref(ownerDb, rootPath + "/bins/bin-001"), { currentFillPercent: 99 }));
+  await assertFails(set(ref(ownerDb, rootPath + "/devices/esp32-bin-001/config"), { binId: "bin-001", binHeightCm: 50 }));
 });
 
 test("bin reads require an owner-scoped query", async () => {
@@ -120,6 +114,7 @@ test("a provisioned device can only publish state for its registered bin", async
       deviceId: "esp32-bin-001",
       binId: "bin-001",
       state: "CRITICAL",
+      latestEventSequence: 1,
       measurement: { fillPercent: 82.5 },
     }),
   );
@@ -128,6 +123,7 @@ test("a provisioned device can only publish state for its registered bin", async
       deviceId: "esp32-bin-001",
       binId: "bin-002",
       state: "CRITICAL",
+      latestEventSequence: 1,
       measurement: { fillPercent: 82.5 },
     }),
   );
@@ -173,4 +169,12 @@ test("OAuth refresh tokens are not readable by the client", async () => {
   await assertSucceeds(
     set(ref(ownerDb, `${rootPath}/users/owner-1/fcmTokens/token-1`), "fcm-token"),
   );
+});
+
+test("notification token writes are owner-scoped and validate token shape", async () => {
+  const ownerDb = testEnv.authenticatedContext("owner-1").database();
+  await assertSucceeds(set(ref(ownerDb, rootPath + "/users/owner-1/fcmTokens/install"), "token"));
+  await assertFails(set(ref(ownerDb, rootPath + "/users/owner-2/fcmTokens/install"), "token"));
+  await assertFails(set(ref(ownerDb, rootPath + "/users/owner-1/fcmTokens/install"), { forged: true }));
+  await assertSucceeds(set(ref(ownerDb, rootPath + "/users/owner-1/fcmTokens/install"), null));
 });

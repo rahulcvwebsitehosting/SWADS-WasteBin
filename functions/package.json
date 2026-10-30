@@ -10,7 +10,9 @@
     "build": "tsc src/index.ts --outDir lib --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck --strict",
     "deploy": "npm run build && firebase deploy --only functions",
     "test:rules:node": "node --test test/database.rules.test.mjs",
-    "test:rules": "firebase emulators:exec --project swads-wastebin --only database \"npm run test:rules:node\""
+    "test:rules": "firebase emulators:exec --project swads-wastebin --only database \"npm run test:rules:node\"",
+    "test": "npm run build && node --test test/dispatch.test.mjs",
+    "provision": "node scripts/provision-device.mjs"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",

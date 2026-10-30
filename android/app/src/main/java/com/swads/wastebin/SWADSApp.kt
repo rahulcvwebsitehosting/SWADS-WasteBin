@@ -11,6 +11,7 @@ import com.swads.wastebin.auth.LoginScreen
 import com.swads.wastebin.dashboard.DashboardScreen
 import com.swads.wastebin.dashboard.DashboardViewModel
 import com.swads.wastebin.registration.RegisterBinScreen
+import android.net.Uri
 
 private object Routes {
     const val LOGIN = "login"
@@ -51,10 +52,12 @@ fun SWADSApp() {
                 onRegisterBin = {
                     navController.navigate(Routes.REGISTER)
                 },
+                onEditBin = { binId -> navController.navigate("register/${Uri.encode(binId)}") },
                 onSignOut = {
-                    authViewModel.signOut()
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.DASHBOARD) { inclusive = true }
+                    authViewModel.signOut {
+                        navController.navigate(Routes.LOGIN) {
+                            popUpTo(Routes.DASHBOARD) { inclusive = true }
+                        }
                     }
                 },
             )
@@ -62,6 +65,13 @@ fun SWADSApp() {
 
         composable(Routes.REGISTER) {
             RegisterBinScreen(
+                onRegistered = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable("register/{binId}") { entry ->
+            RegisterBinScreen(
+                initialBinId = entry.arguments?.getString("binId"),
                 onRegistered = { navController.popBackStack() },
                 onBack = { navController.popBackStack() },
             )

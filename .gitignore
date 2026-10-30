@@ -14,6 +14,9 @@ functions/.runtime-secrets.local
 functions/.secret.local
 *-debug.log
 tmp/
+.secrets/
+functions/.secrets/
+firmware/.pio/
 android/gradle/gradle-daemon-jvm.properties
 android/.kotlin/
 android/keystore.properties

@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        Notifications.syncToken(this)
 
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(

@@ -3,13 +3,11 @@ import { getDatabase } from "firebase-admin/database";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger, setGlobalOptions } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
-import {
-  onValueCreated,
-  onValueWritten,
-} from "firebase-functions/v2/database";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { google } from "googleapis";
 import OpenAI from "openai";
+import { createEventHandlers, databaseStore } from "./events.js";
+import { AmbiguousDeliveryError, isKey, ROOT, type Services } from "./dispatch.js";
 
 initializeApp();
 const FUNCTION_REGION =
@@ -22,30 +20,13 @@ setGlobalOptions({
 });
 
 const database = getDatabase();
-const ROOT = "/swads/v1";
-const EVENT_PATH = `${ROOT}/events/{eventId}`;
-const DATABASE_INSTANCE = "swads-wastebin-default-rtdb";
 
 const OPENROUTER_API_KEY = defineSecret("OPENROUTER_API_KEY");
 const GOOGLE_OAUTH_CLIENT_ID = defineSecret("GOOGLE_OAUTH_CLIENT_ID");
 const GOOGLE_OAUTH_CLIENT_SECRET = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 
-type EventType = "ALERT_80" | "RESET";
 type ContactType = "municipal" | "private_recycler";
 type ContactConfidence = "high" | "medium" | "low";
-
-interface EspEvent {
-  eventId: string;
-  type: EventType;
-  deviceId: string;
-  binId: string;
-  alertCycleId?: string | null;
-  receivedAt?: number;
-  measurement?: {
-    distanceCm?: number | null;
-    fillPercent?: number | null;
-  };
-}
 
 interface BinRecord {
   ownerUid: string;
@@ -59,15 +40,6 @@ interface BinRecord {
     pinCode?: string;
     address?: string;
   };
-}
-
-interface DeviceState {
-  binId?: string;
-  state?: "NORMAL" | "CRITICAL";
-  measurement?: {
-    fillPercent?: number | null;
-  };
-  lastUpdatedAt?: number;
 }
 
 interface Contact {
@@ -84,37 +56,8 @@ interface ResearchResult {
   error?: string;
 }
 
-const DEFAULT_TAMIL_NADU_CONTACTS: Contact[] = [
-  {
-    organization: "Directorate of Municipal Administration, Tamil Nadu",
-    email: "cma.tncma@nic.in",
-    type: "municipal",
-    sourceUrl: "https://www.tnurbantree.tn.gov.in/contact-us/",
-    confidence: "high",
-  },
-  {
-    organization: "Coimbatore City Municipal Corporation",
-    email: "commr.coimbatore@tn.gov.in",
-    type: "municipal",
-    sourceUrl:
-      "https://www.tnurbantree.tn.gov.in/municipal-e-mail-ids/",
-    confidence: "high",
-  },
-  {
-    organization: "Madurai Corporation",
-    email: "commr.madurai@tn.gov.in",
-    type: "municipal",
-    sourceUrl: "https://www.tnurbantree.tn.gov.in/madurai/contact-us/",
-    confidence: "high",
-  },
-];
-
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isFirebaseKey(value: string): boolean {
-  return value.length > 0 && !/[.#$[\]/\u0000-\u001F\u007F]/.test(value);
 }
 
 function sanitizeOneLine(value: string): string {
@@ -143,6 +86,9 @@ export const saveGoogleOAuthCode = onCall(
       "",
     );
     const { tokens } = await oauthClient.getToken(code);
+    if (tokens.scope && !tokens.scope.split(" ").includes("https://www.googleapis.com/auth/gmail.send")) {
+      throw new HttpsError("permission-denied", "Gmail sending consent is required.");
+    }
     const existingOAuthSnapshot = await database
       .ref(`${ROOT}/users/${ownerUid}/googleOAuth`)
       .get();
@@ -286,6 +232,8 @@ async function researchContacts(bin: BinRecord): Promise<ResearchResult> {
     const openai = new OpenAI({
       apiKey: OPENROUTER_API_KEY.value(),
       baseURL: "https://openrouter.ai/api/v1",
+      timeout: 20000,
+      maxRetries: 0,
     });
     const location = locationDescription(bin);
     const completion = await openai.chat.completions.create({
@@ -320,11 +268,11 @@ async function researchContacts(bin: BinRecord): Promise<ResearchResult> {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown OpenRouter error";
-    logger.warn("Contact research failed; using Tamil Nadu fallback contacts", {
+    logger.warn("Contact suggestions failed; no automatic fallback recipients", {
       error: message,
     });
     return {
-      contacts: DEFAULT_TAMIL_NADU_CONTACTS,
+      contacts: [],
       source: "fallback",
       error: message,
     };
@@ -392,12 +340,22 @@ async function sendGmail(
   }
 
   const gmail = google.gmail({ version: "v1", auth: oauthClient });
-  const response = await gmail.users.messages.send({
-    userId: "me",
-    requestBody: {
-      raw: buildRawEmail(subject, body, recipients),
-    },
-  });
+  let response;
+  try {
+    response = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw: buildRawEmail(subject, body, recipients) },
+    }, { timeout: 20000, retry: false });
+  } catch (error: any) {
+    const status = Number(error?.response?.status);
+    // A lost response or server error may follow an accepted send. Gmail has
+    // no idempotency key: never blindly resend an uncertain external effect.
+    if (!status || status >= 500 || status === 408) {
+      throw new AmbiguousDeliveryError("Gmail send outcome is unknown. Check Sent mail before retrying.");
+    }
+    throw error;
+  }
+  if (!response.data.id) throw new AmbiguousDeliveryError("Gmail did not return a message ID. Check Sent mail.");
 
   return {
     messageId: response.data.id ?? "",
@@ -440,13 +398,9 @@ async function sendNotification(
 
   const result = await getMessaging().sendEachForMulticast({
     tokens,
-    notification: { title, body },
-    data,
+    data: { ...data, title, body, ownerUid },
     android: {
       priority: "high",
-      notification: {
-        channelId: "swads_alerts",
-      },
     },
   });
 
@@ -455,380 +409,32 @@ async function sendNotification(
     successCount: result.successCount,
     failureCount: result.failureCount,
   });
+  const invalid = new Set(tokens.filter((_, index) =>
+    ["messaging/registration-token-not-registered", "messaging/invalid-registration-token"].includes(result.responses[index]?.error?.code ?? "")));
+  const removals: Promise<unknown>[] = [];
+  tokenSnapshot.forEach(child => {
+    const value = child.val();
+    const token = typeof value === "string" ? value : value?.token;
+    if (invalid.has(token)) removals.push(child.ref.transaction(current => {
+      const currentToken = typeof current === "string" ? current : current?.token;
+      return invalid.has(currentToken) ? null : undefined;
+    }));
+  });
+  await Promise.all(removals);
 }
 
-async function markEventBackend(
-  eventId: string,
-  values: Record<string, unknown>,
-): Promise<void> {
-  await database
-    .ref(`${ROOT}/eventBackend/${eventId}`)
-    .update({
-      ...values,
-      updatedAt: Date.now(),
-    });
-}
 
-export const syncBinState = onValueWritten(
-  {
-    ref: `${ROOT}/devices/{deviceId}/state`,
-    instance: DATABASE_INSTANCE,
-    timeoutSeconds: 30,
-    memory: "256MiB",
-  },
-  async (triggerEvent) => {
-    const state = triggerEvent.data.after.val() as DeviceState | null;
-    if (!state?.binId || !isFirebaseKey(state.binId)) {
-      return;
-    }
+const services: Services = { store: databaseStore(), now: Date.now, send: sendGmail, notify: sendNotification };
+export const { syncBinState, dispatchOnAlert, clearOnReset, retryDispatchJobs, syncDispatchStatus } = createEventHandlers(services, [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET]);
+export { registerBin, retryCollectionRequest } from "./registration.js";
 
-    const deviceId = triggerEvent.params.deviceId;
-    const registrationSnapshot = await database
-      .ref(`${ROOT}/deviceRegistry/${deviceId}`)
-      .get();
-    const registration = registrationSnapshot.val() as
-      | { binId?: string }
-      | null;
-    if (registration?.binId !== state.binId) {
-      logger.warn("Rejected device state with mismatched bin registration", {
-        deviceId,
-        reportedBinId: state.binId,
-        registeredBinId: registration?.binId ?? null,
-      });
-      return;
-    }
-
-    const fillPercent = state.measurement?.fillPercent;
-    const currentState =
-      state.state === "CRITICAL"
-        ? "ALERT_80"
-        : typeof fillPercent === "number" && fillPercent <= 20
-          ? "CLEARED"
-          : "NORMAL";
-
-    await database.ref(`${ROOT}/bins/${state.binId}`).transaction((bin) => {
-      if (!bin?.ownerUid || bin.deviceId !== deviceId) {
-        return;
-      }
-
-      return {
-        ...bin,
-        ...(typeof fillPercent === "number"
-          ? { currentFillPercent: fillPercent }
-          : {}),
-        currentState,
-        deviceId,
-        lastTelemetryAt: state.lastUpdatedAt ?? Date.now(),
-      };
-    });
-  },
-);
-
-export const dispatchOnAlert = onValueCreated(
-  {
-    ref: EVENT_PATH,
-    instance: DATABASE_INSTANCE,
-    secrets: [
-      OPENROUTER_API_KEY,
-      GOOGLE_OAUTH_CLIENT_ID,
-      GOOGLE_OAUTH_CLIENT_SECRET,
-    ],
-    timeoutSeconds: 120,
-    memory: "256MiB",
-  },
-  async (triggerEvent) => {
-    const eventId = triggerEvent.params.eventId;
-    const event = triggerEvent.data.val() as EspEvent | null;
-
-    if (!event || event.type !== "ALERT_80") {
-      return;
-    }
-
-    if (
-      !isFirebaseKey(event.binId || "") ||
-      !event.deviceId ||
-      (event.alertCycleId && !isFirebaseKey(event.alertCycleId))
-    ) {
-      await markEventBackend(eventId, {
-        status: "Rejected",
-        error: "Event contains an invalid binId, deviceId, or alertCycleId",
-      });
-      return;
-    }
-
-    const binSnapshot = await database
-      .ref(`${ROOT}/bins/${event.binId}`)
-      .get();
-    const bin = binSnapshot.val() as BinRecord | null;
-    if (!bin?.ownerUid) {
-      await markEventBackend(eventId, {
-        status: "Rejected",
-        error: "Bin owner is not configured",
-      });
-      return;
-    }
-
-    let location: string;
-    try {
-      location = locationDescription(bin);
-    } catch (error) {
-      await markEventBackend(eventId, {
-        status: "Rejected",
-        error: error instanceof Error ? error.message : "Invalid location",
-      });
-      return;
-    }
-
-    const alertCycleId = event.alertCycleId || eventId;
-    const activeAlertRef = database.ref(
-      `${ROOT}/activeAlerts/${event.binId}`,
-    );
-    const lockResult = await activeAlertRef.transaction((currentValue) => {
-      if (currentValue !== null) {
-        return;
-      }
-      return {
-        alertCycleId,
-        eventId,
-        createdAt: Date.now(),
-      };
-    });
-
-    if (!lockResult.committed) {
-      await markEventBackend(eventId, {
-        status: "IgnoredDuplicate",
-        alertCycleId,
-      });
-      logger.info("Duplicate ALERT_80 ignored", {
-        binId: event.binId,
-        eventId,
-      });
-      return;
-    }
-
-    const cycleRef = database.ref(
-      `${ROOT}/alertCycles/${alertCycleId}`,
-    );
-    await cycleRef.set({
-      alertCycleId,
-      eventId,
-      binId: event.binId,
-      deviceId: event.deviceId,
-      ownerUid: bin.ownerUid,
-      status: "Dispatching",
-      location,
-      fillPercent: event.measurement?.fillPercent ?? null,
-      triggeredAt: event.receivedAt ?? Date.now(),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-
-    await markEventBackend(eventId, {
-      status: "Dispatching",
-      alertCycleId,
-    });
-
-    try {
-      const research = await researchContacts(bin);
-      const recipients = research.contacts.map((contact) => contact.email);
-      logger.info("Contact research completed", {
-        source: research.source,
-        contactCount: recipients.length,
-      });
-      const binLabel = sanitizeOneLine(bin.displayName || event.binId);
-      const subject =
-        `URGENT: Smart Bin #${binLabel} at ${location} ` +
-        "is 80% Full - Clearance Required";
-      const body = [
-        "This is an automated alert from the SWADS IoT network.",
-        "",
-        `The garbage bin located at ${location} has reached 80% capacity.`,
-        `Bin ID: ${event.binId}`,
-        `Device ID: ${event.deviceId}`,
-        "",
-        "Please dispatch a clearance team or vehicle at the earliest.",
-        "",
-        "Thank you.",
-      ].join("\r\n");
-
-      const gmailResult = await sendGmail(
-        bin.ownerUid,
-        subject,
-        body,
-        recipients,
-      );
-
-      await cycleRef.update({
-        status: "AwaitingClearance",
-        contacts: research.contacts,
-        contactResearchSource: research.source,
-        contactResearchError: research.error ?? null,
-        recipientEmails: recipients,
-        gmailMessageId: gmailResult.messageId,
-        gmailThreadId: gmailResult.threadId,
-        dispatchedAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      await markEventBackend(eventId, {
-        status: "EmailsSent",
-        alertCycleId,
-        gmailMessageId: gmailResult.messageId,
-      });
-
-      try {
-        await sendNotification(
-          bin.ownerUid,
-          "Dispatch Emails Sent",
-          `Clearance emails were sent for ${binLabel}.`,
-          {
-            type: "DISPATCH_SENT",
-            binId: event.binId,
-            alertCycleId,
-          },
-        );
-      } catch (notificationError) {
-        logger.error("Dispatch FCM notification failed", notificationError);
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown dispatch error";
-      await cycleRef.update({
-        status: "DispatchFailed",
-        error: message,
-        updatedAt: Date.now(),
-      });
-      await markEventBackend(eventId, {
-        status: "DispatchFailed",
-        alertCycleId,
-        error: message,
-      });
-      logger.error("Alert dispatch failed", {
-        eventId,
-        alertCycleId,
-        error: message,
-      });
-    }
-  },
-);
-
-export const clearOnReset = onValueCreated(
-  {
-    ref: EVENT_PATH,
-    instance: DATABASE_INSTANCE,
-    timeoutSeconds: 60,
-    memory: "256MiB",
-  },
-  async (triggerEvent) => {
-    const eventId = triggerEvent.params.eventId;
-    const event = triggerEvent.data.val() as EspEvent | null;
-
-    if (
-      !event ||
-      event.type !== "RESET" ||
-      !isFirebaseKey(event.binId || "") ||
-      (event.alertCycleId && !isFirebaseKey(event.alertCycleId))
-    ) {
-      return;
-    }
-
-    const activeAlertRef = database.ref(
-      `${ROOT}/activeAlerts/${event.binId}`,
-    );
-    const activeSnapshot = await activeAlertRef.get();
-    const activeValue = activeSnapshot.val() as
-      | string
-      | { alertCycleId?: string }
-      | null;
-    const activeAlertCycleId =
-      typeof activeValue === "string"
-        ? activeValue
-        : activeValue?.alertCycleId;
-
-    if (!activeAlertCycleId) {
-      await markEventBackend(eventId, {
-        status: "ResetWithoutActiveAlert",
-      });
-      return;
-    }
-
-    if (
-      event.alertCycleId &&
-      event.alertCycleId !== activeAlertCycleId
-    ) {
-      await markEventBackend(eventId, {
-        status: "Rejected",
-        error: "Reset alertCycleId does not match the active alert",
-      });
-      return;
-    }
-
-    const alertCycleId = activeAlertCycleId;
-
-    const cycleRef = database.ref(
-      `${ROOT}/alertCycles/${alertCycleId}`,
-    );
-    const cycleSnapshot = await cycleRef.get();
-    const cycle = cycleSnapshot.val() as
-      | { ownerUid?: string; binId?: string; deviceId?: string }
-      | null;
-
-    if (
-      !cycle ||
-      cycle.binId !== event.binId ||
-      cycle.deviceId !== event.deviceId
-    ) {
-      await markEventBackend(eventId, {
-        status: "Rejected",
-        error: "Reset event does not match the active alert cycle",
-      });
-      return;
-    }
-
-    await cycleRef.update({
-      status: "Cleared",
-      resetEventId: eventId,
-      clearedAt: event.receivedAt ?? Date.now(),
-      updatedAt: Date.now(),
-    });
-
-    await activeAlertRef.transaction((currentValue) => {
-      if (
-        currentValue?.alertCycleId === alertCycleId ||
-        currentValue === alertCycleId
-      ) {
-        return null;
-      }
-      return;
-    });
-
-    await markEventBackend(eventId, {
-      status: "Cleared",
-      alertCycleId,
-    });
-
-    let ownerUid = cycle?.ownerUid;
-    if (!ownerUid) {
-      const binSnapshot = await database
-        .ref(`${ROOT}/bins/${event.binId}`)
-        .get();
-      ownerUid = (binSnapshot.val() as BinRecord | null)?.ownerUid;
-    }
-
-    if (ownerUid) {
-      try {
-        await sendNotification(
-          ownerUid,
-          "Bin Cleared",
-          `Bin ${event.binId} has been emptied and reset to normal.`,
-          {
-            type: "BIN_CLEARED",
-            binId: event.binId,
-            alertCycleId,
-          },
-        );
-      } catch (notificationError) {
-        logger.error("Clearance FCM notification failed", notificationError);
-      }
-    }
-  },
-);
+// Discovery is advisory only. These results are never automatic recipients.
+export const suggestCollectionContacts = onCall({ region: "asia-southeast1", secrets: [OPENROUTER_API_KEY], timeoutSeconds: 30 }, async request => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
+  const binId = request.data?.binId;
+  if (!isKey(binId)) throw new HttpsError("invalid-argument", "Invalid bin ID.");
+  const bin = (await database.ref(`${ROOT}/bins/${binId}`).get()).val();
+  if (bin?.ownerUid !== request.auth.uid) throw new HttpsError("permission-denied", "This bin belongs to another account.");
+  const result = await researchContacts(bin);
+  return { ...result, verified: false, notice: "Suggestions require independent verification before saving as collection contacts." };
+});

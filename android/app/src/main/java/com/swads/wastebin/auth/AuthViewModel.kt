@@ -9,15 +9,15 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.functions.FirebaseFunctions
-import com.google.firebase.messaging.FirebaseMessaging
 import com.swads.wastebin.R
+import com.swads.wastebin.Notifications
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class AuthUiState(
     val isLoading: Boolean = false,
@@ -27,7 +27,6 @@ data class AuthUiState(
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val firebaseAuth = FirebaseAuth.getInstance()
-    private val database = FirebaseDatabase.getInstance().reference
     private val functions = FirebaseFunctions.getInstance("asia-southeast1")
     private val gmailScope = "https://www.googleapis.com/auth/gmail.send"
     private val webClientId = defaultWebClientId(application)
@@ -74,25 +73,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     GoogleAuthProvider.getCredential(idToken, null)
                 val authResult =
                     firebaseAuth.signInWithCredential(firebaseCredential).await()
-                val uid =
-                    authResult.user?.uid
-                        ?: error("Firebase user ID was not returned.")
+                checkNotNull(authResult.user?.uid) { "Firebase user ID was not returned." }
 
                 functions
                     .getHttpsCallable("saveGoogleOAuthCode")
                     .call(mapOf("code" to serverAuthCode))
                     .await()
 
-                val fcmToken = FirebaseMessaging.getInstance().token.await()
-                database
-                    .child("swads")
-                    .child("v1")
-                    .child("users")
-                    .child(uid)
-                    .child("fcmTokens")
-                    .push()
-                    .setValue(fcmToken)
-                    .await()
+                // A notification-service outage must not undo a successful login.
+                runCatching { withTimeoutOrNull(5000) { Notifications.syncToken(getApplication()).await() } }
 
                 _uiState.value = AuthUiState(isSignedIn = true)
             } catch (exception: Exception) {
@@ -107,10 +96,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun signOut() {
-        firebaseAuth.signOut()
-        googleSignInClient.signOut()
-        _uiState.value = AuthUiState()
+    fun signOut(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            firebaseAuth.currentUser?.uid?.let { uid ->
+                runCatching { withTimeoutOrNull(3000) { Notifications.unregister(getApplication(), uid).await() } }
+            }
+            firebaseAuth.signOut()
+            runCatching { googleSignInClient.signOut().await() }
+            _uiState.value = AuthUiState()
+            onComplete()
+        }
     }
 
     private fun defaultWebClientId(application: Application): String {

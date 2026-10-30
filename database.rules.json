@@ -4,17 +4,19 @@
       "v1": {
         "bins": {
           ".read": "auth != null && query.orderByChild == 'ownerUid' && query.equalTo == auth.uid",
-          ".indexOn": ["ownerUid"],
+          ".indexOn": [
+            "ownerUid"
+          ],
           "$binId": {
-            ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid)",
-            ".validate": "newData.hasChildren(['binId', 'deviceId', 'heightCm', 'location', 'ownerUid', 'currentFillPercent', 'currentState']) && newData.child('binId').val() === $binId && newData.child('ownerUid').val() === auth.uid && newData.child('deviceId').isString() && (!data.exists() || newData.child('deviceId').val() === data.child('deviceId').val()) && newData.child('heightCm').isNumber() && newData.child('heightCm').val() >= 10 && newData.child('heightCm').val() <= 350 && newData.child('currentFillPercent').isNumber() && newData.child('currentFillPercent').val() >= 0 && newData.child('currentFillPercent').val() <= 100 && (newData.child('currentState').val() === 'NORMAL' || newData.child('currentState').val() === 'ALERT_80' || newData.child('currentState').val() === 'CLEARED')"
+            ".write": false,
+            ".read": "auth != null && data.child('ownerUid').val() === auth.uid"
           }
         },
         "devices": {
           "$deviceId": {
             ".read": "auth != null && (root.child('swads/v1/deviceUsers').child(auth.uid).child($deviceId).val() === true || root.child('swads/v1/deviceRegistry').child($deviceId).child('ownerUid').val() === auth.uid)",
             "config": {
-              ".write": "auth != null && newData.exists() && root.child('swads/v1/deviceRegistry').child($deviceId).child('ownerUid').val() === auth.uid",
+              ".write": false,
               ".validate": "newData.child('binId').val() === root.child('swads/v1/deviceRegistry').child($deviceId).child('binId').val() && newData.child('binHeightCm').isNumber() && newData.child('binHeightCm').val() >= 10 && newData.child('binHeightCm').val() <= 350"
             },
             "info": {
@@ -23,7 +25,7 @@
             },
             "state": {
               ".write": "auth != null && newData.exists() && root.child('swads/v1/deviceUsers').child(auth.uid).child($deviceId).val() === true",
-              ".validate": "newData.child('deviceId').val() === $deviceId && newData.child('binId').val() === root.child('swads/v1/deviceRegistry').child($deviceId).child('binId').val() && (newData.child('state').val() === 'NORMAL' || newData.child('state').val() === 'CRITICAL') && (!newData.child('measurement/fillPercent').exists() || (newData.child('measurement/fillPercent').isNumber() && newData.child('measurement/fillPercent').val() >= 0 && newData.child('measurement/fillPercent').val() <= 100))"
+              ".validate": "newData.child('deviceId').val() === $deviceId && newData.child('binId').val() === root.child('swads/v1/deviceRegistry').child($deviceId).child('binId').val() && (newData.child('state').val() === 'NORMAL' || newData.child('state').val() === 'CRITICAL') && (!newData.child('measurement/fillPercent').exists() || (newData.child('measurement/fillPercent').isNumber() && newData.child('measurement/fillPercent').val() >= 0 && newData.child('measurement/fillPercent').val() <= 100)) && newData.child('latestEventSequence').isNumber() && newData.child('latestEventSequence').val() >= 0"
             },
             "heartbeat": {
               ".write": "auth != null && newData.exists() && root.child('swads/v1/deviceUsers').child(auth.uid).child($deviceId).val() === true",
@@ -40,7 +42,7 @@
         "events": {
           "$eventId": {
             ".read": "auth != null && root.child('swads/v1/bins').child(data.child('binId').val()).child('ownerUid').val() === auth.uid",
-            ".write": "auth != null && newData.exists() && newData.child('eventId').val() === $eventId && newData.child('deviceId').isString() && newData.child('binId').isString() && (newData.child('type').val() === 'ALERT_80' || newData.child('type').val() === 'RESET') && root.child('swads/v1/deviceUsers').child(auth.uid).child(newData.child('deviceId').val()).val() === true && root.child('swads/v1/deviceRegistry').child(newData.child('deviceId').val()).child('binId').val() === newData.child('binId').val() && (!data.exists() || (newData.child('eventId').val() === data.child('eventId').val() && newData.child('type').val() === data.child('type').val() && newData.child('deviceId').val() === data.child('deviceId').val() && newData.child('binId').val() === data.child('binId').val() && newData.child('alertCycleId').val() === data.child('alertCycleId').val()))"
+            ".write": "auth != null && newData.exists() && newData.child('eventId').val() === $eventId && newData.child('deviceId').isString() && newData.child('binId').isString() && (newData.child('type').val() === 'ALERT_80' || newData.child('type').val() === 'RESET') && root.child('swads/v1/deviceUsers').child(auth.uid).child(newData.child('deviceId').val()).val() === true && root.child('swads/v1/deviceRegistry').child(newData.child('deviceId').val()).child('binId').val() === newData.child('binId').val() && (!data.exists() || (newData.child('eventId').val() === data.child('eventId').val() && newData.child('type').val() === data.child('type').val() && newData.child('deviceId').val() === data.child('deviceId').val() && newData.child('binId').val() === data.child('binId').val() && newData.child('alertCycleId').val() === data.child('alertCycleId').val())) && newData.child('deviceEventSequence').isNumber() && newData.child('deviceEventSequence').val() > 0 && newData.child('alertCycleId').isString()"
           }
         },
         "eventBackend": {
@@ -52,8 +54,7 @@
         "deviceRegistry": {
           "$deviceId": {
             ".read": "auth != null && data.child('ownerUid').val() === auth.uid",
-            ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid)",
-            ".validate": "newData.hasChildren(['ownerUid', 'binId']) && newData.child('ownerUid').val() === auth.uid && newData.child('binId').isString() && (!data.exists() || newData.child('binId').val() === data.child('binId').val())"
+            ".write": false
           }
         },
         "deviceUsers": {
@@ -79,9 +80,19 @@
               ".write": false
             },
             "fcmTokens": {
-              ".write": "auth != null && auth.uid === $uid"
+              ".write": "auth != null && auth.uid === $uid",
+              "$installationId": {
+                ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0 && newData.val().length <= 4096)"
+              }
             }
           }
+        },
+        "dispatchJobs": {
+          ".read": false,
+          ".write": false,
+          ".indexOn": [
+            "nextAttemptAt"
+          ]
         }
       }
     }

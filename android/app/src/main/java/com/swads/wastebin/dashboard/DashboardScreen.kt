@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -22,6 +23,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+import java.text.DateFormat
+import java.util.Date
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,9 +41,20 @@ import androidx.compose.ui.unit.dp
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onRegisterBin: () -> Unit,
+    onEditBin: (String) -> Unit,
     onSignOut: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var reviewBin by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(15000) } }
+    reviewBin?.let { binId ->
+        AlertDialog(onDismissRequest = { reviewBin = null },
+            title = { Text("Check Sent mail first") },
+            text = { Text("The previous delivery outcome is unknown. Retry only after checking that no collection email for this alert appears in your Gmail Sent folder.") },
+            confirmButton = { TextButton(onClick = { reviewBin = null; viewModel.retryCollection(binId, true) }) { Text("Checked, no email — retry") } },
+            dismissButton = { TextButton(onClick = { reviewBin = null }) { Text("Cancel") } })
+    }
 
     Scaffold(
         topBar = {
@@ -65,6 +84,7 @@ fun DashboardScreen(
                 Text("Register Bin")
             }
 
+            uiState.actionMessage?.let { Text(it, modifier = Modifier.padding(16.dp)) }
             when {
                 uiState.isLoading -> {
                     Column(
@@ -100,7 +120,10 @@ fun DashboardScreen(
                             items = uiState.bins,
                             key = { it.binId },
                         ) { bin ->
-                            BinCard(bin)
+                            BinCard(bin, now, onEdit = { onEditBin(bin.binId) }, onRetry = {
+                                if (bin.dispatchStatus == "ReviewRequired") reviewBin = bin.binId
+                                else viewModel.retryCollection(bin.binId)
+                            })
                         }
                     }
                 }
@@ -110,7 +133,7 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun BinCard(bin: BinItem) {
+private fun BinCard(bin: BinItem, now: Long, onEdit: () -> Unit, onRetry: () -> Unit) {
     val locale = LocalLocale.current.platformLocale
     val isCritical = bin.currentState == "ALERT_80"
     val containerColor =
@@ -154,6 +177,23 @@ private fun BinCard(bin: BinItem) {
                     ),
                 )
                 Text(bin.currentState)
+            }
+            val stale = bin.lastTelemetryAt == 0L || now - bin.lastTelemetryAt > 180000L
+            when {
+                bin.lastTelemetryAt == 0L -> Text("Waiting for device connection and first reading.")
+                stale -> Text("Device offline or readings delayed. The displayed value may be out of date.")
+                !bin.measurementValid -> Text("Sensor needs attention: ${bin.sensorHealth}. Showing the last valid value.")
+                bin.sensorHealth == "DEGRADED" -> Text("Some sensor samples were invalid.")
+            }
+            if (bin.lastValidMeasurementAt > 0L) {
+                Text("Last valid reading: ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(bin.lastValidMeasurementAt))}")
+            }
+            if (bin.currentState == "ALERT_80" && bin.dispatchStatus.isNotBlank()) Text("Collection request: ${bin.dispatchStatus}")
+            Row {
+                TextButton(onClick = onEdit) { Text("Settings / Contact") }
+                if (bin.currentState == "ALERT_80" && bin.dispatchStatus in setOf("NeedsContacts", "DispatchFailed", "ReviewRequired", "RetryPending", "WaitingForDevice")) {
+                    TextButton(onClick = onRetry) { Text("Retry Request") }
+                }
             }
         }
     }

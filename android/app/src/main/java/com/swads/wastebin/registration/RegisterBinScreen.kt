@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.LaunchedEffect
+import com.google.firebase.functions.FirebaseFunctions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,27 +32,51 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ServerValue
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterBinScreen(
+    initialBinId: String? = null,
     onRegistered: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var binId by remember { mutableStateOf("") }
+    var binId by remember { mutableStateOf(initialBinId ?: "") }
     var heightCm by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
+    var claimCode by remember { mutableStateOf("") }
+    var contactEmail by remember { mutableStateOf("") }
+    var contactOrganization by remember { mutableStateOf("") }
+    var contactSource by remember { mutableStateOf("") }
+    var contactVerified by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
+    LaunchedEffect(initialBinId) {
+        if (initialBinId != null) {
+            isSubmitting = true
+            try {
+                val snapshot = FirebaseDatabase.getInstance().getReference("swads/v1/bins/$initialBinId").get().await()
+                heightCm = snapshot.child("heightCm").value?.toString() ?: ""
+                val loc = snapshot.child("location")
+                location = loc.child("pinCode").value?.toString() ?: loc.child("address").value?.toString()
+                    ?: "${loc.child("latitude").value},${loc.child("longitude").value}"
+                val contact = snapshot.child("dispatchContacts").children.firstOrNull()
+                contactEmail = contact?.child("email")?.value?.toString() ?: ""
+                contactOrganization = contact?.child("organization")?.value?.toString() ?: ""
+                contactSource = contact?.child("sourceUrl")?.value?.toString() ?: ""
+                contactVerified = contact?.child("verified")?.value == true
+            } catch (exception: Exception) { errorMessage = exception.message ?: "Unable to load bin settings." }
+            finally { isSubmitting = false }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Register Bin") },
+                title = { Text(if (initialBinId == null) "Register Bin" else "Bin Settings") },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
                         Text("Back")
@@ -67,6 +95,7 @@ fun RegisterBinScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedTextField(
+                enabled = initialBinId == null && !isSubmitting,
                 value = binId,
                 onValueChange = { binId = it },
                 label = { Text("Bin ID") },
@@ -89,6 +118,23 @@ fun RegisterBinScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            if (initialBinId == null) {
+                OutlinedTextField(value = claimCode, onValueChange = { claimCode = it },
+                    label = { Text("Device claim code") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+            Text("Collection contact (optional)", style = MaterialTheme.typography.titleMedium)
+            Text("Monitoring works without a contact. Automatic requests need a verified email for this bin's area.")
+            OutlinedTextField(value = contactEmail, onValueChange = { contactEmail = it; contactVerified = false },
+                label = { Text("Collection email") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = contactOrganization, onValueChange = { contactOrganization = it; contactVerified = false },
+                label = { Text("Organization") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = contactSource, onValueChange = { contactSource = it; contactVerified = false },
+                label = { Text("HTTPS page listing this email") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row {
+                Checkbox(checked = contactVerified, onCheckedChange = { contactVerified = it })
+                Text("I checked that this email belongs to the organization and serves this bin's location.")
+            }
 
             errorMessage?.let { message ->
                 Text(
@@ -126,48 +172,18 @@ fun RegisterBinScreen(
                                 error("Enter a location.")
                             }
 
-                            val ownerUid =
-                                FirebaseAuth.getInstance().currentUser?.uid
-                                    ?: error("Sign in before registering a bin.")
-                            val deviceId = "esp32-$normalizedBinId"
-                            val binData =
-                                mapOf(
-                                    "binId" to normalizedBinId,
-                                    "deviceId" to deviceId,
-                                    "heightCm" to parsedHeight,
-                                    "location" to parseLocation(normalizedLocation),
-                                    "ownerUid" to ownerUid,
-                                    "currentFillPercent" to 0.0,
-                                    "currentState" to "NORMAL",
-                                    "createdAt" to ServerValue.TIMESTAMP,
-                                )
-                            val deviceConfig =
-                                mapOf(
-                                    "schemaVersion" to 1,
-                                    "binId" to normalizedBinId,
-                                    "binHeightCm" to parsedHeight,
-                                    "calibrationVersion" to 1,
-                                    "updatedAt" to ServerValue.TIMESTAMP,
-                                )
-                            val registration =
-                                mapOf(
-                                    "ownerUid" to ownerUid,
-                                    "binId" to normalizedBinId,
-                                    "registeredAt" to ServerValue.TIMESTAMP,
-                                )
-                            val registrationUpdates =
-                                mapOf(
-                                    "swads/v1/bins/$normalizedBinId" to binData,
-                                    "swads/v1/deviceRegistry/$deviceId" to registration,
-                                )
-
-                            FirebaseDatabase.getInstance().reference
-                                .updateChildren(registrationUpdates)
-                                .await()
-                            FirebaseDatabase.getInstance().reference
-                                .child("swads/v1/devices/$deviceId/config")
-                                .setValue(deviceConfig)
-                                .await()
+                            checkNotNull(FirebaseAuth.getInstance().currentUser?.uid) { "Sign in before registering a bin." }
+                            val contacts = if (contactEmail.isBlank() && contactOrganization.isBlank() && contactSource.isBlank()) {
+                                emptyList<Map<String, Any>>()
+                            } else {
+                                check(contactVerified) { "Verify the collection contact before saving." }
+                                listOf(mapOf("email" to contactEmail.trim(), "organization" to contactOrganization.trim(),
+                                    "sourceUrl" to contactSource.trim(), "verified" to true))
+                            }
+                            FirebaseFunctions.getInstance("asia-southeast1").getHttpsCallable("registerBin")
+                                .call(mapOf("binId" to normalizedBinId, "heightCm" to parsedHeight,
+                                    "location" to parseLocation(normalizedLocation), "claimCode" to claimCode.trim(),
+                                    "dispatchContacts" to contacts)).await()
 
                             onRegistered()
                         } catch (exception: Exception) {
@@ -183,7 +199,7 @@ fun RegisterBinScreen(
                 if (isSubmitting) {
                     CircularProgressIndicator()
                 } else {
-                    Text("Submit")
+                    Text(if (initialBinId == null) "Register" else "Save Settings")
                 }
             }
         }

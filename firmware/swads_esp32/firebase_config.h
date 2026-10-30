@@ -33,7 +33,7 @@
 #define SWADS_DEVICE_ID "esp32-bin-001"
 #define SWADS_BIN_ID "bin-001"
 
-#define SWADS_FIRMWARE_VERSION "1.0.0"
+#define SWADS_FIRMWARE_VERSION "1.1.0"
 #define SWADS_DATABASE_ROOT "/swads/v1"
 
 // Set to 0 only when the buzzer module turns on with a LOW signal.
