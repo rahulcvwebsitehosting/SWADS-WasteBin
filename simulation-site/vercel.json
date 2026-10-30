@@ -1,0 +1,6 @@
+{
+  "framework": null,
+  "buildCommand": "node bundle.mjs",
+  "installCommand": "node --version",
+  "outputDirectory": "dist"
+}

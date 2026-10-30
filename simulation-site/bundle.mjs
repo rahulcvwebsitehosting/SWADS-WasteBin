@@ -1,0 +1,11 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
+let html=read('dist/index.html');
+const css=read('dist/style.css').replace("@import url('');",'');
+const logic=read('dist/logic.mjs').replace(/^export /gm,'');
+const scene=read('dist/scene.mjs').replace(/^export \{parts\};\r?\n/gm,'').replace(/^export /gm,'');
+const app=read('dist/app.js').replace(/^import .*;\r?\n/gm,'');
+html=html.replace('<link rel="stylesheet" href="style.css">',`<style>${css}</style>`).replace('<script type="module" src="app.js"></script>',`<script>(()=>{\n${logic}\n${scene}\n${app}\n})();</script>`);
+writeFileSync(new URL('SWADS_3D_Lab.html',import.meta.url),html);
+writeFileSync(new URL('dist/SWADS_3D_Lab.html',import.meta.url),html);
+console.log('Bundled self-contained SWADS_3D_Lab.html (no server / internet required).');
